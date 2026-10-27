@@ -13,7 +13,7 @@ configuración ni datos de ese proyecto.
 | Frontend | React 18 + Vite |
 | Backend | FastAPI (Python 3.12) |
 | Base de datos | PostgreSQL 17 |
-| ORM / migraciones | SQLAlchemy 2 + Alembic (Etapa 2) |
+| ORM / migraciones | SQLAlchemy 2 + Alembic |
 | Autenticación | JWT Bearer (Etapa 3) |
 | Contenedores | Docker + Docker Compose |
 
@@ -54,6 +54,50 @@ Detener y eliminar volúmenes (**destructivo**, borra base de datos y documentos
 docker compose down -v
 ```
 
+## Base de datos y migraciones
+
+La primera vez (y tras cada nueva migración) hay que aplicar el esquema:
+
+```bash
+docker compose exec backend alembic upgrade head
+```
+
+Otros comandos útiles:
+
+```bash
+# Version aplicada actualmente
+docker compose exec backend alembic current
+
+# Verificar que los modelos ORM coinciden con la base de datos
+docker compose exec backend alembic check
+
+# Crear una migracion nueva tras cambiar los modelos (revisar el archivo generado)
+docker compose exec backend alembic revision --autogenerate -m "descripcion del cambio"
+```
+
+Reglas de la Etapa 2 reflejadas en el esquema:
+
+- RUT canonico (`12345678-9`, sin puntos) validado por restriccion `CHECK`.
+- Una cita no puede terminar antes de empezar.
+- Estados de cita limitados a los cinco permitidos.
+- Una atencion por cita y coherencia de paciente/profesional con la cita.
+- Documentos asociados a una atencion deben pertenecer al mismo paciente.
+- Solapamientos de agenda bloqueados en la base de datos con
+  `EXCLUDE USING gist`, incluidas solicitudes concurrentes. Las citas canceladas
+  liberan el horario.
+- Pacientes con historial (`citas`, `atenciones`, `documentos`) no pueden
+  eliminarse fisicamente (`ON DELETE RESTRICT`).
+
+## Pruebas automatizadas
+
+```bash
+docker compose exec backend pytest -v
+```
+
+Las pruebas de integracion crean una base de datos aparte
+(`citas_municipales_test`), aplican las migraciones desde cero y la eliminan al
+terminar. Nunca usan la base de datos de desarrollo ni datos reales.
+
 ## Variables de entorno
 
 | Variable | Descripción |
@@ -81,12 +125,16 @@ aplicacion_DISS/
 ├─ backend/
 │  ├─ Dockerfile
 │  ├─ requirements.txt
+│  ├─ alembic.ini
+│  ├─ migrations/              # Entorno de Alembic y versiones del esquema
+│  ├─ tests/                   # Pruebas pytest
 │  └─ app/
 │     ├─ main.py               # Aplicación FastAPI
 │     ├─ core/config.py        # Configuración desde variables de entorno
 │     ├─ core/errors.py        # Manejo uniforme de errores
 │     ├─ db/base.py            # Base declarativa de SQLAlchemy
 │     ├─ db/session.py         # Motor y sesiones
+│     ├─ models/               # Modelos ORM (una entidad por archivo)
 │     └─ api/v1/               # Rutas de la API v1
 └─ frontend/
    ├─ Dockerfile
@@ -108,8 +156,8 @@ restauración se documentará en la etapa de integración.
 
 | Etapa | Descripción | Estado |
 |---|---|---|
-| 1 | Estructura, configuración, Docker Compose y salud | En curso |
-| 2 | Modelos ORM y migraciones Alembic | Pendiente |
+| 1 | Estructura, configuración, Docker Compose y salud | Completada |
+| 2 | Modelos ORM y migraciones Alembic | Completada |
 | 3 | Autenticación y autorización | Pendiente |
 | 4 | Usuarios, profesionales y pacientes | Pendiente |
 | 5 | Citas y agenda | Pendiente |

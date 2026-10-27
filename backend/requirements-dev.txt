@@ -1,0 +1,2 @@
+# Dependencias de desarrollo y pruebas. No forman parte de una imagen de produccion.
+pytest==8.3.4
