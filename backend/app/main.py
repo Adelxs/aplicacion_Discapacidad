@@ -21,6 +21,10 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     Path(settings.documentos_dir).mkdir(parents=True, exist_ok=True)
+    if len(settings.secret_key) < 32:
+        logger.warning(
+            "SECRET_KEY tiene menos de 32 caracteres. Configure un secreto seguro."
+        )
     logger.info("Servicio iniciado en entorno '%s'.", settings.entorno)
     yield
 

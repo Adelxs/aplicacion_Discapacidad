@@ -88,6 +88,35 @@ Reglas de la Etapa 2 reflejadas en el esquema:
 - Pacientes con historial (`citas`, `atenciones`, `documentos`) no pueden
   eliminarse fisicamente (`ON DELETE RESTRICT`).
 
+## Autenticación
+
+| Método | Endpoint | Función |
+|---|---|---|
+| POST | `/api/v1/auth/login` | Autentica con RUT y contraseña. |
+| GET | `/api/v1/auth/me` | Devuelve la identidad del usuario autenticado. |
+
+- Contraseñas almacenadas con **Argon2id**; nunca en texto plano.
+- Token **JWT** firmado con `HS256` y `SECRET_KEY`, con expiración obligatoria.
+- El token solo contiene `sub` (RUT), `rol`, `iat` y `exp`: sin contraseñas ni
+  información clínica.
+- Los mensajes de error de login no revelan si el RUT existe.
+- Una cuenta desactivada pierde acceso de inmediato, aunque su token siga vigente.
+- La autorización por rol se verifica en el backend con la dependencia
+  `requiere_roles`; ocultar botones en React no sustituye ese control.
+
+### Crear la cuenta administradora inicial
+
+No hay registro público: la primera cuenta se crea por consola.
+
+```bash
+docker compose exec backend python -m app.cli.crear_admin \
+  --rut 11111111-1 --nombres Ana --apellidos Administradora \
+  --correo ana@ejemplo.cl
+```
+
+La contraseña se solicita de forma interactiva, de modo que no queda en el
+historial de comandos ni en los logs.
+
 ## Pruebas automatizadas
 
 ```bash
@@ -105,8 +134,9 @@ terminar. Nunca usan la base de datos de desarrollo ni datos reales.
 | `POSTGRES_DB` | Nombre de la base de datos. |
 | `POSTGRES_USER` | Usuario de la base de datos. |
 | `POSTGRES_PASSWORD` | Contraseña de la base de datos. No se versiona. |
-| `SECRET_KEY` | Secreto para la firma de JWT (se usa desde la Etapa 3). |
+| `SECRET_KEY` | Secreto para la firma de JWT. |
 | `ENTORNO` | `desarrollo`, `pruebas` o `produccion`. |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | Vigencia del token de acceso en minutos (480 por defecto). |
 | `MAX_DOCUMENTO_MB` | Tamaño máximo permitido por documento. |
 | `VITE_API_URL` | URL base de la API consumida por el frontend. |
 
@@ -132,6 +162,11 @@ aplicacion_DISS/
 │     ├─ main.py               # Aplicación FastAPI
 │     ├─ core/config.py        # Configuración desde variables de entorno
 │     ├─ core/errors.py        # Manejo uniforme de errores
+│     ├─ core/rut.py           # Normalización y validación de RUT
+│     ├─ core/security.py      # Argon2id y JWT
+│     ├─ api/deps.py           # Autenticación y autorización por rol
+│     ├─ schemas/              # Esquemas Pydantic de entrada/salida
+│     ├─ cli/                  # Comandos administrativos (crear_admin)
 │     ├─ db/base.py            # Base declarativa de SQLAlchemy
 │     ├─ db/session.py         # Motor y sesiones
 │     ├─ models/               # Modelos ORM (una entidad por archivo)
@@ -158,7 +193,7 @@ restauración se documentará en la etapa de integración.
 |---|---|---|
 | 1 | Estructura, configuración, Docker Compose y salud | Completada |
 | 2 | Modelos ORM y migraciones Alembic | Completada |
-| 3 | Autenticación y autorización | Pendiente |
+| 3 | Autenticación y autorización | Completada |
 | 4 | Usuarios, profesionales y pacientes | Pendiente |
 | 5 | Citas y agenda | Pendiente |
 | 6 | Atenciones | Pendiente |

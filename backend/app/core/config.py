@@ -21,7 +21,10 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://postgres:postgres@db:5432/citas"
 
     secret_key: str = "cambiar-en-entorno-real"
-    access_token_expire_minutes: int = 60
+    jwt_algorithm: str = "HS256"
+    # Jornada laboral: el MVP no incluye refresh tokens.
+    access_token_expire_minutes: int = 480
+    password_min_length: int = 8
 
     cors_origins: list[str] = ["http://localhost:5173"]
 
