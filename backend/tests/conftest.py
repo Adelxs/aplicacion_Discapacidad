@@ -169,6 +169,7 @@ def crear_atencion(datos_base: Connection):
         id_cita,
         paciente: str = "33333333-3",
         profesional: str = "22222222-2",
+        creado_por: str = "22222222-2",
     ):
         return datos_base.execute(
             text(
@@ -189,7 +190,7 @@ def crear_atencion(datos_base: Connection):
                 "fecha": minutos(30),
                 "motivo": "Atencion de prueba",
                 "registro": "Registro clinico sintetico, sin datos reales.",
-                "creado_por": profesional,
+                "creado_por": creado_por,
             },
         ).scalar_one()
 
