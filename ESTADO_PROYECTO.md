@@ -5,7 +5,7 @@
 **Alcance:** Sistema Municipal de Gestión de Citas y Atenciones — MVP
 
 > Este documento refleja únicamente lo verificado hasta la fecha de corte.
-> Las Etapas 1 a 6 están completas y con la suite en verde. La Etapa 6 **aún no
+> Las Etapas 1 a 7 están completas y con la suite en verde. La Etapa 7 **aún no
 > tiene commit**: sus cambios están en el árbol de trabajo.
 
 ---
@@ -16,17 +16,17 @@
 |---|---|
 | Entorno Docker (PostgreSQL + FastAPI + React) | Funcionando, 3 servicios arriba |
 | Migración inicial aplicada | Sí (`0001_esquema_inicial`, head) |
-| Etapas 1 a 6 | Completadas, probadas y verificadas |
-| Etapa 6 (atenciones) | **Completada y verificada** (sin commit) |
-| Etapas 7 a 9 | No iniciadas |
+| Etapas 1 a 7 | Completadas, probadas y verificadas |
+| Etapa 7 (documentos) | **Completada y verificada** (sin commit) |
+| Etapas 8 y 9 | No iniciadas |
 | Repositorio remoto (GitHub) | **No existe**; solo repositorio local |
-| Último commit | `9ee42e3` (cierre de Etapa 5) |
-| Cambios de Etapa 6 en git | **Sin commit** (2 modificados + 4 nuevos) |
+| Último commit | `0fd83d4` (cierre de Etapa 6) |
+| Cambios de Etapa 7 en git | **Sin commit** (2 modificados + 4 nuevos) |
 
 **Resultado de la última ejecución completa de pruebas (29-10-2026):**
 
 ```text
-119 passed, 1 warning in 445.60s
+133 passed, 1 warning in 304.78s
 ```
 
 ---
@@ -41,6 +41,7 @@
 | ORM / migraciones | SQLAlchemy 2.0.36 + Alembic 1.14.0 |
 | Seguridad | Argon2id (`argon2-cffi` 23.1.0), JWT HS256 (`PyJWT` 2.10.1) |
 | Validación de correo | `email-validator` 2.2.0 |
+| Subida de archivos | `python-multipart` 0.0.20 |
 | Zona horaria | `zoneinfo` + `tzdata` 2024.2, `America/Santiago` |
 | Pruebas | pytest 8.3.4 + httpx 0.28.1 |
 | Contenedores | Docker 29.8.2 + Compose v5.5.1 |
@@ -60,7 +61,7 @@
 | 4. Usuarios, profesionales y pacientes | **Completada** | 26 pruebas propias; verificación manual por HTTP |
 | 5. Citas y agenda | **Completada** | 27 pruebas propias; verificación manual por HTTP |
 | 6. Atenciones | **Completada** | 15 pruebas propias; verificación manual por HTTP |
-| 7. Documentos | No iniciada | — |
+| 7. Documentos | **Completada** | 14 pruebas propias; verificación manual por HTTP y volumen |
 | 8. Frontend completo | No iniciada | Solo existe la pantalla mínima de estado de la Etapa 1 |
 | 9. Integración y cierre | No iniciada | — |
 
@@ -71,7 +72,8 @@
 ### 4.1. Infraestructura (Etapa 1)
 
 - `docker-compose.yml` con tres servicios, volúmenes persistentes y healthchecks.
-- Volumen privado para documentos declarado (`diss_documentos_data`).
+- Volumen privado para documentos (`diss_documentos_data`) montado en
+  `/data/documentos` del backend.
 - Configuración por variables de entorno; `.env` local **no versionado**.
 - Manejo uniforme de errores: `{"error": {"codigo", "mensaje", "detalle"}}`.
 - CORS restringido a `http://localhost:5173`.
@@ -166,7 +168,44 @@ Reglas implementadas:
   paginación; orden descendente por fecha de atención.
 - Fechas presentadas en `America/Santiago`.
 
-### 4.7. Verificación manual de la Etapa 5 (29-10-2026)
+### 4.7. Documentos privados (Etapa 7)
+
+| Método | Ruta | Permisos |
+|---|---|---|
+| `GET` | `/api/v1/documentos` | Administrador: todos. Profesional: los que subió o los de sus atenciones |
+| `POST` | `/api/v1/documentos` | Profesional dueño de la atención o administrador |
+| `GET` | `/api/v1/documentos/{id}` | Administrador o profesional con visibilidad |
+| `GET` | `/api/v1/documentos/{id}/archivo` | Administrador o profesional con visibilidad |
+| `DELETE` | `/api/v1/documentos/{id}` | Solo quien subió el documento |
+
+La subida es `multipart/form-data` con `paciente_rut` (obligatorio),
+`archivo` (obligatorio) e `id_atencion` (opcional). Reglas implementadas:
+
+- Se aceptan **PDF, JPEG y PNG**; el tipo se determina por la **firma del
+  contenido** (primeros bytes), no por el `Content-Type` ni por la extensión
+  declarada. Otro contenido → **415**.
+- Tamaño máximo **10 MB** por archivo (`MAX_DOCUMENTO_MB`); al excederlo →
+  **413** y el archivo parcial se elimina.
+- El archivo se guarda fuera de la base de datos, en el volumen privado, con un
+  nombre **generado por el servidor** (UUID + extensión coherente con el
+  contenido). El nombre original se sanea (`Path.name`, sin rutas ni `..`) y
+  solo se conserva como metadato; `clave_archivo` no se expone en la API.
+- Un documento puede existir **sin atención**, ligado al paciente (por ejemplo,
+  exámenes previos). Si se indica `id_atencion`, la atención debe pertenecer al
+  paciente indicado (422 si no coincide) y el profesional debe ser su dueño
+  (404 en caso contrario); el administrador puede adjuntar a cualquier atención.
+- Visibilidad: el administrador ve y descarga todo; el profesional ve los
+  documentos que subió y los de sus propias atenciones. Un documento sin
+  atención subido por el administrador **no** es visible para profesionales
+  (404). El listado aplica la misma regla.
+- El borrado solo lo puede hacer **quien subió** el documento; el archivo físico
+  se elimina junto con el registro. El administrador que no lo subió recibe
+  **403**; un profesional sin visibilidad recibe **404**.
+- Listado con búsqueda parcial por RUT del paciente y paginación; orden
+  descendente por fecha de creación.
+- Fechas presentadas en `America/Santiago`.
+
+### 4.8. Verificación manual de la Etapa 5 (29-10-2026)
 
 16 comprobaciones por HTTP real (uvicorn, no `TestClient`): agenda del
 profesional (201, `profesional_rut` propio, estado `pendiente`, offset
@@ -175,7 +214,7 @@ listados por rol, confirmar/ausente, terminal 409, cancelar, 403 del
 administrador al cancelar, 403 del profesional al editar observaciones, 200 del
 administrador, filtro por estado y limpieza de los datos sintéticos.
 
-### 4.8. Verificación manual de la Etapa 6 (29-10-2026)
+### 4.9. Verificación manual de la Etapa 6 (29-10-2026)
 
 Ejecutada con `httpx` contra la API real y datos sintéticos eliminados al final:
 
@@ -192,6 +231,28 @@ Ejecutada con `httpx` contra la API real y datos sintéticos eliminados al final
 | Filtro por RUT del paciente | 1 atención |
 | Fecha fuera del horario de la cita | 422 (`datos_invalidos`) |
 | Limpieza de atenciones, citas y paciente | Correcta |
+
+### 4.10. Verificación manual de la Etapa 7 (29-10-2026)
+
+Ejecutada con `httpx` contra la API real (uvicorn en Docker), con archivos y
+datos sintéticos eliminados al final:
+
+| Comprobación | Resultado |
+|---|---|
+| Profesional sube PDF a su atención | 201 (52 bytes, `informe.pdf`) |
+| Descarga del documento | 200; bytes idénticos; `application/pdf`; `attachment; filename="informe.pdf"` |
+| Administrador sube PNG del paciente sin atención | 201 |
+| Profesional consulta el documento administrativo | 404 (`no_encontrado`) |
+| Tipo no permitido (`text/plain`) | 415 (`tipo_no_permitido`) |
+| PDF de 11 MB | 413 (`archivo_demasiado_grande`) |
+| Volumen antes / durante / después | `[]` / 2 archivos / `[]` |
+| Profesional elimina su documento | 204 |
+| Documento eliminado ya no existe | 404 |
+| Administrador elimina el suyo | 204 |
+| Limpieza de atención, cita y paciente | Correcta |
+
+El volumen `diss_documentos_data` quedó **sin archivos residuales** y la base de
+desarrollo conserva solo las cuentas sintéticas habituales.
 
 ---
 
@@ -217,9 +278,8 @@ desarrollo; conviene comprobar que no queden procesos vivos antes de probar.
 
 ## 6. Pendiente de implementación
 
-- **Etapa 7:** documentos (subida, descarga protegida, volumen privado).
 - **Etapa 8:** frontend completo (login, sidebar por rol, dashboards, tablas,
-  formularios, autocompletado por RUT).
+  formularios, autocompletado por RUT y subida de documentos).
 - **Etapa 9:** integración, pruebas de extremo a extremo, respaldo/restauración,
   documentación final.
 
@@ -239,7 +299,7 @@ desarrollo; conviene comprobar que no queden procesos vivos antes de probar.
   `registro_clinico`; no queda traza de la versión anterior hasta que exista
   auditoría.
 
-### Decisiones tomadas para las Etapas 5 y 6
+### Decisiones tomadas para las Etapas 5, 6 y 7
 
 - Solo el profesional dueño confirma, cancela o marca ausencia; el
   administrador únicamente consulta y anota observaciones.
@@ -248,6 +308,13 @@ desarrollo; conviene comprobar que no queden procesos vivos antes de probar.
   dueño, con fecha enviada y validada dentro del horario.
 - La atención se puede corregir después por quien la registró.
 - El administrador nunca escribe datos clínicos.
+- Suben documentos el profesional dueño de la atención **o** el administrador.
+- Descarga el administrador o el profesional con visibilidad sobre el documento.
+- Solo PDF, JPEG y PNG, hasta 10 MB, validados por contenido.
+- Solo quien subió puede eliminar; el archivo físico se borra con el registro.
+- Se permiten documentos sin atención, ligados al paciente.
+- Para profesionales, los documentos sin atención subidos por el administrador
+  no son visibles (interpretación aplicada; ver decisiones pendientes).
 
 ---
 
@@ -255,9 +322,12 @@ desarrollo; conviene comprobar que no queden procesos vivos antes de probar.
 
 - No hay pruebas de extremo a extremo desde el navegador.
 - El frontend no consume ninguno de los endpoints de negocio.
-- No se ha probado la persistencia de documentos (el volumen existe, pero no
-  hay módulo).
-- No se ha probado respaldo ni restauración de la base de datos.
+- La persistencia de documentos se verificó en el volumen real con archivos
+  pequeños; no se probaron archivos cercanos al límite de 10 MB, cortes de
+  conexión ni cargas concurrentes.
+- No hay análisis antivirus ni cuarentena de archivos subidos.
+- No se ha probado respaldo ni restauración de la base de datos ni del volumen
+  de documentos.
 - **Concurrencia real:** las pruebas fuerzan las restricciones de la base
   (solapamiento y atención única) sin lanzar dos peticiones HTTP simultáneas.
 - No se ha probado el flujo de recuperación de contraseña (no existe).
@@ -268,7 +338,7 @@ desarrollo; conviene comprobar que no queden procesos vivos antes de probar.
 
 ## 8. Archivos del proyecto
 
-### 8.1. Versionados (commits `e45174f`, `9b34f82`, `81031b3`, `bbcae95`, `9ee42e3`)
+### 8.1. Versionados (commits `e45174f`, `9b34f82`, `81031b3`, `bbcae95`, `9ee42e3`, `0fd83d4`)
 
 ```text
 .env.example
@@ -286,16 +356,18 @@ backend/
     core/{__init__,config,errors,rut,security,tiempo}.py
     db/{__init__,base,session}.py
     models/{__init__,enums,usuario,profesional,paciente,cita,atencion,documento}.py
-    schemas/{__init__,auth,common,usuario,profesional,paciente,cita}.py
+    schemas/{__init__,auth,common,usuario,profesional,paciente,cita,atencion}.py
     api/{__init__,comun,deps}.py
-    api/v1/{__init__,router,health,auth,usuarios,profesionales,pacientes,citas}.py
-    services/{__init__,paginacion,usuarios,profesionales,pacientes,citas}.py
+    api/v1/{__init__,router,health,auth,usuarios,profesionales,pacientes,citas,
+            atenciones}.py
+    services/{__init__,paginacion,usuarios,profesionales,pacientes,citas,
+              atenciones}.py
     cli/{__init__,crear_admin}.py
   migrations/
     env.py                      script.py.mako
     versions/0001_esquema_inicial.py
   tests/{__init__,conftest,apoyo,test_esquema,test_rut,test_auth,test_etapa4,
-         test_etapa5}.py
+         test_etapa5,test_etapa6}.py
 frontend/
   .dockerignore                 Dockerfile
   index.html                    package.json
@@ -303,18 +375,18 @@ frontend/
   src/{main.jsx,App.jsx,index.css}
 ```
 
-### 8.2. Sin commit (Etapa 6)
+### 8.2. Sin commit (Etapa 7)
 
 ```text
 Modificados:
-  backend/app/api/v1/router.py          # registra el router de atenciones
-  backend/tests/conftest.py             # fixture crear_atencion acepta autor
+  backend/app/api/v1/router.py          # registra el router de documentos
+  backend/requirements.txt              # python-multipart==0.0.20
 
 Nuevos:
-  backend/app/schemas/atencion.py
-  backend/app/services/atenciones.py
-  backend/app/api/v1/atenciones.py
-  backend/tests/test_etapa6.py
+  backend/app/schemas/documento.py
+  backend/app/services/documentos.py
+  backend/app/api/v1/documentos.py
+  backend/tests/test_etapa7.py
 ```
 
 ### 8.3. Solo local (no versionado)
@@ -341,8 +413,9 @@ Nuevos:
 - `12345678-5`: usuario profesional sintético con su perfil vinculado, creado en
   la verificación de la Etapa 4. Su contraseña es la de los datos de prueba.
 
-Todas las citas, atenciones y pacientes usados en las verificaciones se
-eliminaron al terminar. No hay datos clínicos reales.
+Todas las citas, atenciones, pacientes y documentos usados en las
+verificaciones se eliminaron al terminar. El volumen de documentos quedó vacío.
+No hay datos clínicos reales.
 
 ---
 
@@ -356,7 +429,7 @@ docker compose exec backend alembic current
 docker compose exec backend alembic check
 
 docker compose exec backend pytest
-docker compose exec backend pytest tests/test_etapa6.py -v
+docker compose exec backend pytest tests/test_etapa7.py -v
 
 docker compose exec backend python -m app.cli.crear_admin \
   --rut 11111111-1 --nombres Ana --apellidos Administradora \
@@ -369,11 +442,15 @@ docker compose exec backend python -m app.cli.crear_admin \
 
 Las pruebas crean y eliminan `citas_municipales_test`; nunca tocan la base de
 desarrollo. Si una ejecución se interrumpe, puede quedar un `pytest` huérfano
-que elimine esa base a mitad de la siguiente ejecución.
+que elimine esa base a mitad de la siguiente ejecución. Las pruebas de
+documentos usan un directorio temporal y no escriben en el volumen real.
+
+Para incorporar `python-multipart` fue necesario reconstruir la imagen del
+backend (`docker compose build backend` + `docker compose up -d backend`).
 
 ---
 
-## 11. Cierre de las Etapas 5 y 6
+## 11. Cierre de las Etapas 5, 6 y 7
 
 ### Etapa 5 — Citas y agenda
 
@@ -404,35 +481,54 @@ que elimine esa base a mitad de la siguiente ejecución.
 | Administrador sin escritura clínica | Cumplido (403) |
 | Atención ajena invisible | Cumplido (404) |
 | Listados, filtros y paginación | Cumplido |
+| Commit de la etapa | Cumplido (`0fd83d4`) |
+
+### Etapa 7 — Documentos privados
+
+| Criterio | Estado |
+|---|---|
+| Profesional dueño o administrador suben | Cumplido |
+| Validación por contenido, no por cabecera | Cumplido (415) |
+| Límite de 10 MB | Cumplido (413) |
+| Nombre original saneado y clave generada por el servidor | Cumplido |
+| Documento sin atención ligado al paciente | Cumplido |
+| Coherencia paciente/atención | Cumplido (422) |
+| Visibilidad por rol y propiedad | Cumplido (404) |
+| Descarga protegida y con bytes idénticos | Cumplido |
+| Borrado solo por el autor | Cumplido (403/404) |
+| Archivo físico eliminado con el registro | Cumplido (volumen vacío) |
+| Pruebas propias | 14 passed |
 | Commit de la etapa | **Pendiente de autorización** |
 
-`alembic check` responde «No new upgrade operations detected»: las Etapas 5 y 6
-no introdujeron cambios de esquema.
+`alembic check` responde «No new upgrade operations detected»: las Etapas 5, 6
+y 7 no introdujeron cambios de esquema.
 
 ---
 
-## 12. Siguiente etapa propuesta: Etapa 7 — Documentos
+## 12. Siguiente etapa propuesta: Etapa 8 — Frontend completo
 
-**Objetivo:** adjuntar archivos privados a un paciente (y opcionalmente a una
-atención), almacenados fuera de la base de datos y servidos solo a usuarios
-autorizados.
-
-El modelo ya existe: `id_documento`, `paciente_rut`, `id_atencion` (opcional),
-`nombre_original`, `tipo_mime`, `tamano_bytes`, `clave_archivo` (única),
-`subido_por_rut`, `fecha_creacion`; con coherencia paciente/atención y el
-volumen `diss_documentos_data` declarado.
+**Objetivo:** construir la interfaz React que consuma los endpoints ya
+verificados: login, navegación por rol, dashboards, tablas con filtros y
+paginación, formularios de pacientes, profesionales, citas, atenciones y
+documentos, con autocompletado por RUT.
 
 **Decisiones a consultar antes de implementar:**
 
-1. Quién puede subir: ¿solo el profesional dueño de la atención, también el
-   administrador, o ambos?
-2. Quién puede descargar: ¿administrador y profesional dueño, o todo
-   profesional autenticado?
-3. Tipos MIME permitidos (por ejemplo PDF, imágenes) y tamaño máximo.
-4. Si se permite borrar documentos y con qué permisos.
-5. Si un documento puede existir sin atención (`id_atencion` nulo).
+1. Enrutamiento y estado de sesión: ¿React Router y almacenamiento del token en
+   `localStorage`, o estado en memoria con cierre de sesión al recargar?
+2. Estructura de navegación: ¿sidebar fijo por rol, pestañas o rutas anidadas?
+3. Contenido exacto de los dashboards (métricas, «actividad reciente», períodos).
+4. Campos y filtros visibles en cada tabla; comportamiento de la paginación.
+5. Autocompletado por RUT: ¿consulta al listado de pacientes/profesionales con
+   búsqueda parcial, o entrada manual validada?
+6. Subida de documentos desde el navegador: ¿solo desde la ficha de atención,
+   también desde la ficha del paciente?
+7. Manejo de expiración del token (480 minutos), mensajes de error y
+   confirmaciones de borrado.
+8. Diseño visual: ¿se reutiliza `index.css` con un estilo propio o se incorpora
+   una biblioteca de componentes?
 
-**Requisito previo:** cerrado salvo el commit de la Etapa 6.
+**Requisito previo:** cerrado salvo el commit de la Etapa 7.
 
 ---
 
@@ -456,17 +552,25 @@ volumen `diss_documentos_data` declarado.
 | 29-10-2026 | `pytest tests/test_etapa6.py` | 15 passed |
 | 29-10-2026 | `pytest` (suite completa) | **119 passed**, 1 warning |
 | 29-10-2026 | `alembic check` tras la Etapa 6 | «No new upgrade operations detected» |
-| 29-10-2026 | Verificación manual por HTTP de la Etapa 6 | 11 comprobaciones correctas (sección 4.8) |
+| 29-10-2026 | Verificación manual por HTTP de la Etapa 6 | 11 comprobaciones correctas (sección 4.9) |
+| 29-10-2026 | `docker compose build backend` + `up -d backend` | `python-multipart` 0.0.20 disponible |
+| 29-10-2026 | `pytest tests/test_etapa7.py` | 14 passed |
+| 29-10-2026 | `pytest` (suite completa) | **133 passed**, 1 warning |
+| 29-10-2026 | Verificación manual por HTTP de la Etapa 7 | 11 comprobaciones correctas, volumen vacío (sección 4.10) |
 
 ---
 
 ## 14. Notas y advertencias
 
 - El contenedor `diss_backend` ejecuta el código del árbol de trabajo mediante
-  `uvicorn --reload`, aunque git HEAD no tenga la Etapa 6.
+  `uvicorn --reload`, aunque git HEAD no tenga la Etapa 7.
+- La imagen del backend fue reconstruida para incluir `python-multipart`; un
+  `docker compose up` sin `--build` puede dejar la dependencia ausente.
 - No hay repositorio remoto ni nada publicado en GitHub.
 - El proyecto `aplicacion_SSEE` no ha sido modificado ni consultado.
 - No se usan datos clínicos reales; todos los datos de prueba son sintéticos.
 - No se deben ejecutar `docker compose down -v` ni `alembic downgrade` sin
-  autorización: eliminan datos y esquema.
+  autorización: eliminan datos, archivos y esquema.
 - Las correcciones de atenciones no dejan traza hasta que exista auditoría.
+- Los documentos no se eliminan al borrar un paciente con historial (el borrado
+  está restringido), pero no hay política de retención ni respaldo del volumen.

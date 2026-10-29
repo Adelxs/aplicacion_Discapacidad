@@ -6,6 +6,7 @@ from app.api.v1 import (
     atenciones,
     auth,
     citas,
+    documentos,
     health,
     pacientes,
     profesionales,
@@ -20,3 +21,4 @@ api_router.include_router(profesionales.router)
 api_router.include_router(pacientes.router)
 api_router.include_router(citas.router)
 api_router.include_router(atenciones.router)
+api_router.include_router(documentos.router)
