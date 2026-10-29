@@ -11,10 +11,16 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from alembic import command
 from alembic.config import Config
+from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.engine import Connection, make_url
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.security import hashear_password
+from app.db.session import get_db
+from app.main import app as aplicacion
+from tests.apoyo import CLAVE_ADMIN, CLAVE_PROFESIONAL, override_db
 
 NOMBRE_BD_PRUEBAS = os.getenv("TEST_DATABASE_NAME", "citas_municipales_test")
 
@@ -188,3 +194,41 @@ def crear_atencion(datos_base: Connection):
         ).scalar_one()
 
     return _crear
+
+
+@pytest.fixture()
+def usuarios_auth(datos_base):
+    """Usuarios con contrasenas Argon2id reales para probar autenticacion."""
+    datos_base.execute(
+        text("UPDATE usuarios SET password_hash = :h WHERE rut = :r"),
+        {"h": hashear_password(CLAVE_ADMIN), "r": "11111111-1"},
+    )
+    datos_base.execute(
+        text("UPDATE usuarios SET password_hash = :h WHERE rut = :r"),
+        {"h": hashear_password(CLAVE_PROFESIONAL), "r": "22222222-2"},
+    )
+    datos_base.execute(
+        text(
+            """
+            INSERT INTO usuarios
+                (rut, nombres, apellidos, correo_electronico,
+                 password_hash, rol, activo)
+            VALUES
+                ('66666666-6', 'Ines', 'Inactiva', 'ines@ejemplo.cl',
+                 :h, 'profesional', false)
+            """
+        ),
+        {"h": hashear_password(CLAVE_PROFESIONAL)},
+    )
+    return datos_base
+
+
+@pytest.fixture()
+def cliente(usuarios_auth, conexion):
+    """Cliente HTTP de la API real, con la base de pruebas inyectada."""
+    aplicacion.dependency_overrides[get_db] = override_db(conexion)
+    try:
+        with TestClient(aplicacion) as cliente_http:
+            yield cliente_http
+    finally:
+        aplicacion.dependency_overrides.clear()

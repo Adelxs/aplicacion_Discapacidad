@@ -7,7 +7,6 @@ import pytest
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import text
-from sqlalchemy.orm import Session
 
 from app.api.deps import requiere_roles
 from app.core.config import settings
@@ -18,71 +17,15 @@ from app.core.security import (
     verificar_password,
 )
 from app.db.session import get_db
-from app.main import app as aplicacion
 from app.models import RolUsuario, Usuario
-
-CLAVE_ADMIN = "ClaveAdmin123!"
-CLAVE_PROFESIONAL = "ClaveProf123!"
-
-
-def _override_db(conexion):
-    def _get_db():
-        sesion = Session(bind=conexion, join_transaction_mode="create_savepoint")
-        try:
-            yield sesion
-        finally:
-            sesion.close()
-
-    return _get_db
-
-
-@pytest.fixture()
-def usuarios_auth(datos_base):
-    datos_base.execute(
-        text("UPDATE usuarios SET password_hash = :h WHERE rut = :r"),
-        {"h": hashear_password(CLAVE_ADMIN), "r": "11111111-1"},
-    )
-    datos_base.execute(
-        text("UPDATE usuarios SET password_hash = :h WHERE rut = :r"),
-        {"h": hashear_password(CLAVE_PROFESIONAL), "r": "22222222-2"},
-    )
-    datos_base.execute(
-        text(
-            """
-            INSERT INTO usuarios
-                (rut, nombres, apellidos, correo_electronico,
-                 password_hash, rol, activo)
-            VALUES
-                ('66666666-6', 'Ines', 'Inactiva', 'ines@ejemplo.test',
-                 :h, 'profesional', false)
-            """
-        ),
-        {"h": hashear_password(CLAVE_PROFESIONAL)},
-    )
-    return datos_base
-
-
-@pytest.fixture()
-def cliente(usuarios_auth, conexion):
-    aplicacion.dependency_overrides[get_db] = _override_db(conexion)
-    try:
-        with TestClient(aplicacion) as cliente_http:
-            yield cliente_http
-    finally:
-        aplicacion.dependency_overrides.clear()
-
-
-def login(cliente, rut: str, password: str):
-    return cliente.post(
-        "/api/v1/auth/login",
-        json={"rut": rut, "password": password},
-    )
-
-
-def token_de(cliente, rut: str, password: str) -> str:
-    respuesta = login(cliente, rut, password)
-    assert respuesta.status_code == 200, respuesta.text
-    return respuesta.json()["access_token"]
+from tests.apoyo import (
+    CLAVE_ADMIN,
+    CLAVE_PROFESIONAL,
+    cabecera,
+    login,
+    override_db,
+    token_de,
+)
 
 
 def test_login_correcto_de_administrador(cliente):
@@ -115,7 +58,7 @@ def test_login_con_password_incorrecta(cliente):
 
 def test_login_rut_inexistente_no_revela_la_existencia(cliente):
     incorrecta = login(cliente, "11111111-1", "clave-equivocada")
-    inexistente = login(cliente, "12345678-9", CLAVE_ADMIN)
+    inexistente = login(cliente, "12345678-5", CLAVE_ADMIN)
 
     assert inexistente.status_code == 401
     assert (
@@ -154,20 +97,14 @@ def test_me_con_token_expirado(cliente):
     token, _ = crear_token_acceso(
         "11111111-1", "administrador", expira_en_minutos=-5
     )
-    respuesta = cliente.get(
-        "/api/v1/auth/me",
-        headers={"Authorization": f"Bearer {token}"},
-    )
+    respuesta = cliente.get("/api/v1/auth/me", headers=cabecera(token))
     assert respuesta.status_code == 401
     assert respuesta.json()["error"]["codigo"] == "no_autenticado"
 
 
 def test_me_con_token_de_usuario_inexistente(cliente):
     token, _ = crear_token_acceso("99999999-9", "administrador")
-    respuesta = cliente.get(
-        "/api/v1/auth/me",
-        headers={"Authorization": f"Bearer {token}"},
-    )
+    respuesta = cliente.get("/api/v1/auth/me", headers=cabecera(token))
     assert respuesta.status_code == 401
 
 
@@ -180,10 +117,7 @@ def test_me_con_token_de_usuario_inexistente(cliente):
 )
 def test_me_devuelve_la_identidad(cliente, rut, password, rol):
     token = token_de(cliente, rut, password)
-    respuesta = cliente.get(
-        "/api/v1/auth/me",
-        headers={"Authorization": f"Bearer {token}"},
-    )
+    respuesta = cliente.get("/api/v1/auth/me", headers=cabecera(token))
 
     assert respuesta.status_code == 200
     cuerpo = respuesta.json()
@@ -201,10 +135,7 @@ def test_cuenta_desactivada_pierde_acceso_aunque_el_token_siga_vigente(
         text("UPDATE usuarios SET activo = false WHERE rut = '11111111-1'")
     )
 
-    respuesta = cliente.get(
-        "/api/v1/auth/me",
-        headers={"Authorization": f"Bearer {token}"},
-    )
+    respuesta = cliente.get("/api/v1/auth/me", headers=cabecera(token))
     assert respuesta.status_code == 401
 
 
@@ -225,7 +156,7 @@ def test_hash_es_argon2id():
     assert verificar_password("ClaveSegura124", hash_generado) is False
 
 
-def test_permisos_de_roles_por_http(usuarios_auth, cliente, conexion):
+def test_permisos_de_roles_por_http(cliente, conexion):
     token_admin = token_de(cliente, "11111111-1", CLAVE_ADMIN)
     token_profesional = token_de(cliente, "22222222-2", CLAVE_PROFESIONAL)
 
@@ -244,14 +175,16 @@ def test_permisos_de_roles_por_http(usuarios_auth, cliente, conexion):
     ):
         return {"rut": usuario.rut}
 
-    app_prueba.dependency_overrides[get_db] = _override_db(conexion)
-
-    def cabecera(token: str) -> dict:
-        return {"Authorization": f"Bearer {token}"}
+    app_prueba.dependency_overrides[get_db] = override_db(conexion)
 
     with TestClient(app_prueba) as prueba:
-        assert prueba.get("/solo-admin", headers=cabecera(token_admin)).status_code == 200
-        prohibido = prueba.get("/solo-admin", headers=cabecera(token_profesional))
+        assert (
+            prueba.get("/solo-admin", headers=cabecera(token_admin)).status_code
+            == 200
+        )
+        prohibido = prueba.get(
+            "/solo-admin", headers=cabecera(token_profesional)
+        )
         assert prohibido.status_code == 403
         assert prohibido.json()["error"]["codigo"] == "sin_permisos"
 
@@ -262,6 +195,8 @@ def test_permisos_de_roles_por_http(usuarios_auth, cliente, conexion):
             == 200
         )
         assert (
-            prueba.get("/solo-profesional", headers=cabecera(token_admin)).status_code
+            prueba.get(
+                "/solo-profesional", headers=cabecera(token_admin)
+            ).status_code
             == 403
         )
