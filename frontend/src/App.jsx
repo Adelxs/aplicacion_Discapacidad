@@ -1,116 +1,58 @@
-import { useCallback, useEffect, useState } from "react";
+import { Link, Route, Routes } from "react-router-dom";
 
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+import { RequiereRol, RequiereSesion } from "./auth.jsx";
+import Layout from "./components/Layout.jsx";
+import Atenciones from "./pages/Atenciones.jsx";
+import Citas from "./pages/Citas.jsx";
+import Dashboard from "./pages/Dashboard.jsx";
+import Documentos from "./pages/Documentos.jsx";
+import Login from "./pages/Login.jsx";
+import Pacientes from "./pages/Pacientes.jsx";
+import Profesionales from "./pages/Profesionales.jsx";
+import Usuarios from "./pages/Usuarios.jsx";
 
-async function consultar(ruta) {
-  const respuesta = await fetch(`${API_URL}${ruta}`, {
-    headers: { Accept: "application/json" },
-  });
-  const cuerpo = await respuesta.json().catch(() => null);
-
-  if (!respuesta.ok) {
-    throw new Error(cuerpo?.error?.mensaje ?? `Error HTTP ${respuesta.status}`);
-  }
-  return cuerpo;
-}
-
-function TarjetaEstado({ titulo, descripcion, estado, datos }) {
-  const etiqueta =
-    estado === "ok" ? "Operativo" : estado === "error" ? "Con problemas" : "Verificando";
-
+function NoEncontrada() {
   return (
-    <section className={`tarjeta tarjeta--${estado}`}>
-      <div className="tarjeta__cabecera">
-        <h2>{titulo}</h2>
-        <span className="insignia">{etiqueta}</span>
+    <section className="panel">
+      <div className="panel__cabecera">
+        <h2>Página no encontrada</h2>
       </div>
-      <p className="tarjeta__descripcion">{descripcion}</p>
-
-      {estado === "error" ? (
-        <p className="tarjeta__error" role="alert">
-          {datos}
-        </p>
-      ) : null}
-
-      {estado === "ok" && datos ? (
-        <dl className="detalle">
-          {Object.entries(datos).map(([clave, valor]) => (
-            <div key={clave} className="detalle__fila">
-              <dt>{clave.replaceAll("_", " ")}</dt>
-              <dd>{String(valor)}</dd>
-            </div>
-          ))}
-        </dl>
-      ) : null}
+      <p className="texto-suave">La dirección solicitada no existe en el sistema.</p>
+      <p>
+        <Link to="/">Volver al resumen</Link>
+      </p>
     </section>
   );
 }
 
 export default function App() {
-  const [servicio, setServicio] = useState({ estado: "cargando" });
-  const [baseDatos, setBaseDatos] = useState({ estado: "cargando" });
-  const [actualizado, setActualizado] = useState(null);
-
-  const verificar = useCallback(async () => {
-    setServicio({ estado: "cargando" });
-    setBaseDatos({ estado: "cargando" });
-
-    const [saludServicio, saludBaseDatos] = await Promise.allSettled([
-      consultar("/api/v1/health"),
-      consultar("/api/v1/health/db"),
-    ]);
-
-    setServicio(
-      saludServicio.status === "fulfilled"
-        ? { estado: "ok", datos: saludServicio.value }
-        : { estado: "error", datos: saludServicio.reason.message },
-    );
-    setBaseDatos(
-      saludBaseDatos.status === "fulfilled"
-        ? { estado: "ok", datos: saludBaseDatos.value }
-        : { estado: "error", datos: saludBaseDatos.reason.message },
-    );
-    setActualizado(new Date().toLocaleTimeString("es-CL"));
-  }, []);
-
-  useEffect(() => {
-    verificar();
-  }, [verificar]);
-
   return (
-    <div className="contenedor">
-      <header className="encabezado">
-        <p className="encabezado__etiqueta">Etapa 1 · Verificación del entorno</p>
-        <h1>Sistema Municipal de Citas y Atenciones</h1>
-        <p className="encabezado__texto">
-          Comprobación de la conexión entre React, FastAPI y PostgreSQL.
-        </p>
-      </header>
+    <Routes>
+      <Route path="/login" element={<Login />} />
 
-      <main className="grilla">
-        <TarjetaEstado
-          titulo="API FastAPI"
-          descripcion="Servicio backend que expone la API REST del sistema."
-          estado={servicio.estado}
-          datos={servicio.estado === "ok" ? servicio.datos : servicio.datos}
+      <Route
+        element={
+          <RequiereSesion>
+            <Layout />
+          </RequiereSesion>
+        }
+      >
+        <Route index element={<Dashboard />} />
+        <Route path="citas" element={<Citas />} />
+        <Route path="atenciones" element={<Atenciones />} />
+        <Route path="pacientes" element={<Pacientes />} />
+        <Route path="profesionales" element={<Profesionales />} />
+        <Route path="documentos" element={<Documentos />} />
+        <Route
+          path="usuarios"
+          element={
+            <RequiereRol rol="administrador">
+              <Usuarios />
+            </RequiereRol>
+          }
         />
-        <TarjetaEstado
-          titulo="Base de datos PostgreSQL"
-          descripcion="Verificación real de consulta contra el contenedor de base de datos."
-          estado={baseDatos.estado}
-          datos={baseDatos.estado === "ok" ? baseDatos.datos : baseDatos.datos}
-        />
-      </main>
-
-      <footer className="pie">
-        <button type="button" className="boton" onClick={verificar}>
-          Volver a verificar
-        </button>
-        {actualizado ? <span>Última verificación: {actualizado}</span> : null}
-        <a href={`${API_URL}/docs`} target="_blank" rel="noreferrer">
-          Documentación de la API
-        </a>
-      </footer>
-    </div>
+        <Route path="*" element={<NoEncontrada />} />
+      </Route>
+    </Routes>
   );
 }

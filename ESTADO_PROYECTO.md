@@ -1,12 +1,11 @@
 # Estado del proyecto — `aplicacion_DISS`
 
-**Fecha de corte:** 29 de octubre de 2026
+**Fecha de corte:** 2 de noviembre de 2026
 **Documento de referencia:** Documento Maestro de Especificaciones v1.0
 **Alcance:** Sistema Municipal de Gestión de Citas y Atenciones — MVP
 
 > Este documento refleja únicamente lo verificado hasta la fecha de corte.
-> Las Etapas 1 a 7 están completas y con la suite en verde. La Etapa 7 **aún no
-> tiene commit**: sus cambios están en el árbol de trabajo.
+> Las Etapas 1 a 8 están completas, verificadas y con commit.
 
 ---
 
@@ -16,18 +15,23 @@
 |---|---|
 | Entorno Docker (PostgreSQL + FastAPI + React) | Funcionando, 3 servicios arriba |
 | Migración inicial aplicada | Sí (`0001_esquema_inicial`, head) |
-| Etapas 1 a 7 | Completadas, probadas y verificadas |
-| Etapa 7 (documentos) | **Completada y verificada** (sin commit) |
-| Etapas 8 y 9 | No iniciadas |
+| Etapas 1 a 8 | Completadas, probadas y verificadas |
+| Etapa 7 (documentos) | **Completada y verificada** (commit `a732633`) |
+| Etapa 8 (frontend) | **Completada y verificada en navegador** (commit de cierre de la Etapa 8) |
+| Etapa 9 | No iniciada |
 | Repositorio remoto (GitHub) | **No existe**; solo repositorio local |
-| Último commit | `0fd83d4` (cierre de Etapa 6) |
-| Cambios de Etapa 7 en git | **Sin commit** (2 modificados + 4 nuevos) |
+| Último commit | Cierre de la Etapa 8 |
+| Cambios de Etapa 8 en git | **Commiteados**; árbol de trabajo limpio |
 
-**Resultado de la última ejecución completa de pruebas (29-10-2026):**
+**Resultado de la última ejecución completa de pruebas del backend (02-11-2026):**
 
 ```text
-133 passed, 1 warning in 304.78s
+133 passed, 1 warning in 259.50s
 ```
+
+**Verificación del frontend (02-11-2026):** build de producción correcto,
+`npm audit` con **0 vulnerabilidades** y flujo de extremo a extremo en Chrome
+headless sin errores de consola.
 
 ---
 
@@ -35,7 +39,7 @@
 
 | Componente | Tecnología / versión |
 |---|---|
-| Frontend | React 18.3.1 + Vite 6.0.7 |
+| Frontend | React 18.3.1 + Vite 6.4.5 + React Router 7.18.5 (CSS propio) |
 | Backend | FastAPI 0.115.6, Python 3.12 |
 | Base de datos | PostgreSQL 17 (contenedor) |
 | ORM / migraciones | SQLAlchemy 2.0.36 + Alembic 1.14.0 |
@@ -62,7 +66,7 @@
 | 5. Citas y agenda | **Completada** | 27 pruebas propias; verificación manual por HTTP |
 | 6. Atenciones | **Completada** | 15 pruebas propias; verificación manual por HTTP |
 | 7. Documentos | **Completada** | 14 pruebas propias; verificación manual por HTTP y volumen |
-| 8. Frontend completo | No iniciada | Solo existe la pantalla mínima de estado de la Etapa 1 |
+| 8. Frontend completo | **Completada** | Build 0 vulnerabilidades; flujo E2E en Chrome headless (sección 4.11) |
 | 9. Integración y cierre | No iniciada | — |
 
 ---
@@ -254,6 +258,63 @@ datos sintéticos eliminados al final:
 El volumen `diss_documentos_data` quedó **sin archivos residuales** y la base de
 desarrollo conserva solo las cuentas sintéticas habituales.
 
+### 4.11. Frontend completo (Etapa 8)
+
+Aplicación React con React Router 7, sesión en `sessionStorage` y cliente HTTP
+propio sobre `fetch`:
+
+- **Sesión:** login contra `/api/v1/auth/login`; el token se guarda en
+  `sessionStorage` y se adjunta como `Bearer` en cada petición. Un **401** cierra
+  la sesión y redirige a `/login`; las rutas privadas exigen sesión y `/usuarios`
+  exige rol administrador (la navegación oculta el módulo a profesionales).
+- **Pantallas:** login, resumen (dashboard), citas, atenciones, pacientes,
+  profesionales, documentos y usuarios. Todas consumen los endpoints ya
+  existentes; no se agregaron endpoints nuevos.
+- **Dashboard:** contadores calculados con la API actual —total de citas y
+  desglose por estado, atenciones, pacientes, profesionales, documentos y
+  usuarios (solo administrador)—. Citas, atenciones y documentos respetan el
+  filtrado por propietario del backend; pacientes y profesionales son totales
+  del sistema, porque la API los expone a ambos roles.
+- **Citas:** filtros por paciente, estado y rango de fechas; alta con
+  autocompletado de paciente por RUT; confirmar, cancelar y marcar ausente para
+  el profesional dueño; registro de la atención desde la cita confirmada; el
+  administrador consulta y edita observaciones administrativas.
+- **Atenciones:** listado con filtros, ficha con registro clínico, corrección por
+  el profesional que la registró y documentos adjuntos de la atención.
+- **Pacientes y profesionales:** tablas con filtros y paginación; alta y edición
+  solo para el administrador; el profesional consulta. El borrado de pacientes
+  muestra el conflicto 409 cuando existe historial.
+- **Documentos:** subida desde una atención o solo con el paciente, descarga
+  autenticada (blob con el nombre original), borrado únicamente por quien subió
+  y listado filtrado por la visibilidad que aplica el backend.
+- **UX:** mensajes de error uniformes a partir de `{"error": {...}}`, avisos de
+  éxito, modales con cierre por `Escape`, paginación y formato de fechas en
+  `America/Santiago`.
+- **Dependencias:** `react-router-dom@7.18.5`, `vite@6.4.5` y
+  `package-lock.json` versionado. `npm audit` → **0 vulnerabilidades**.
+
+Verificación de extremo a extremo (02-11-2026, Chrome headless con
+`playwright-core`, datos sintéticos eliminados al final):
+
+| Comprobación | Resultado |
+|---|---|
+| Acceso sin sesión a `/` | Redirige a `/login` |
+| Login del administrador y carga del dashboard | Correcto |
+| Alta de paciente desde el formulario | 201 y fila visible |
+| Login del profesional | Correcto |
+| Profesional abre `/usuarios` | Redirige a `/`; sin enlace en el menú |
+| Crear cita con autocompletado por RUT | Pendiente y visible |
+| Confirmar cita y registrar atención | Correcto; cita `atendida` |
+| Recarga de la página | La sesión se conserva (`sessionStorage`) |
+| Subir PDF a la atención y descargarlo | Bytes idénticos, nombre original |
+| Eliminar el documento como autor | Correcto |
+| Sesión admin y borrado de paciente con historial | 409 mostrado en pantalla |
+| Consola del navegador | Sin excepciones ni errores 5xx |
+
+El volumen de documentos quedó vacío y la base de desarrollo sin datos E2E. Las
+capturas de la verificación se conservan fuera del repositorio, en
+`%TEMP%\opencode\frontend-verif`.
+
 ---
 
 ## 5. Historial: fallos de la Etapa 4 y su resolución
@@ -278,18 +339,16 @@ desarrollo; conviene comprobar que no queden procesos vivos antes de probar.
 
 ## 6. Pendiente de implementación
 
-- **Etapa 8:** frontend completo (login, sidebar por rol, dashboards, tablas,
-  formularios, autocompletado por RUT y subida de documentos).
-- **Etapa 9:** integración, pruebas de extremo a extremo, respaldo/restauración,
-  documentación final.
+- **Etapa 9:** integración, pruebas de extremo a extremo documentadas,
+  respaldo/restauración, documentación final y despliegue.
 
 ### Decisiones pendientes (heredadas del documento)
 
 - Flujo de cambio y recuperación de contraseña.
-- Definición de «actividades» del dashboard profesional.
+- Definición de «actividades» del dashboard profesional (hoy son contadores de
+  citas, atenciones y documentos, sin línea de actividad reciente).
 - Política de auditoría, retención y acceso a logs.
-- Filtros y campos exactos de cada tabla.
-- Períodos de los indicadores del dashboard.
+- Períodos de los indicadores del dashboard (hoy son totales históricos).
 - Estrategia de despliegue productivo y respaldos.
 - **Campos opcionales de pacientes:** `telefono`, `correo_electronico` y
   `direccion` son obligatorios (lectura literal del documento). Sin confirmar.
@@ -316,12 +375,27 @@ desarrollo; conviene comprobar que no queden procesos vivos antes de probar.
 - Para profesionales, los documentos sin atención subidos por el administrador
   no son visibles (interpretación aplicada; ver decisiones pendientes).
 
+### Decisiones tomadas para la Etapa 8
+
+- React Router con el token en `sessionStorage` (sobrevive a recargas, no queda
+  en disco al cerrar la pestaña).
+- Se implementan todos los módulos en la misma etapa, con navegación por rol.
+- El dashboard usa contadores calculados con los endpoints existentes; no se
+  agregó un endpoint de resumen.
+- Selección de pacientes y profesionales por RUT con búsqueda en vivo y retardo.
+- Documentos se suben tanto desde la ficha de la atención como desde la ficha
+  del paciente (sin atención).
+- CSS propio consistente con la paleta carmesí/crema; sin librería de
+  componentes.
+- El frontend refleja las reglas del backend: no duplica permisos ni debilita
+  validaciones; solo oculta acciones que el servidor rechazaría.
+
 ---
 
 ## 7. Lo que NO se ha probado
 
-- No hay pruebas de extremo a extremo desde el navegador.
-- El frontend no consume ninguno de los endpoints de negocio.
+- La verificación E2E se ejecutó con un script externo al repositorio
+  (`playwright-core` en `%TEMP%`); no hay suite E2E versionada ni en CI.
 - La persistencia de documentos se verificó en el volumen real con archivos
   pequeños; no se probaron archivos cercanos al límite de 10 MB, cortes de
   conexión ni cargas concurrentes.
@@ -338,7 +412,7 @@ desarrollo; conviene comprobar que no queden procesos vivos antes de probar.
 
 ## 8. Archivos del proyecto
 
-### 8.1. Versionados (commits `e45174f`, `9b34f82`, `81031b3`, `bbcae95`, `9ee42e3`, `0fd83d4`)
+### 8.1. Versionados (commits `e45174f` … `a732633`)
 
 ```text
 .env.example
@@ -356,37 +430,48 @@ backend/
     core/{__init__,config,errors,rut,security,tiempo}.py
     db/{__init__,base,session}.py
     models/{__init__,enums,usuario,profesional,paciente,cita,atencion,documento}.py
-    schemas/{__init__,auth,common,usuario,profesional,paciente,cita,atencion}.py
+    schemas/{__init__,auth,common,usuario,profesional,paciente,cita,atencion,
+             documento}.py
     api/{__init__,comun,deps}.py
     api/v1/{__init__,router,health,auth,usuarios,profesionales,pacientes,citas,
-            atenciones}.py
+            atenciones,documentos}.py
     services/{__init__,paginacion,usuarios,profesionales,pacientes,citas,
-              atenciones}.py
+              atenciones,documentos}.py
     cli/{__init__,crear_admin}.py
   migrations/
     env.py                      script.py.mako
     versions/0001_esquema_inicial.py
   tests/{__init__,conftest,apoyo,test_esquema,test_rut,test_auth,test_etapa4,
-         test_etapa5,test_etapa6}.py
+         test_etapa5,test_etapa6,test_etapa7}.py
 frontend/
   .dockerignore                 Dockerfile
   index.html                    package.json
-  vite.config.js
+  package-lock.json             vite.config.js
   src/{main.jsx,App.jsx,index.css}
 ```
 
-### 8.2. Sin commit (Etapa 7)
+### 8.2. Incorporados en el commit de cierre (Etapa 8)
 
 ```text
 Modificados:
-  backend/app/api/v1/router.py          # registra el router de documentos
-  backend/requirements.txt              # python-multipart==0.0.20
+  frontend/index.html                   # favicon
+  frontend/package.json                 # react-router-dom 7.18.5, vite 6.4.5
+  frontend/src/App.jsx                  # rutas y protección por rol
+  frontend/src/index.css                # estilos de todo el sistema
+  frontend/src/main.jsx                 # BrowserRouter + AuthProvider
 
 Nuevos:
-  backend/app/schemas/documento.py
-  backend/app/services/documentos.py
-  backend/app/api/v1/documentos.py
-  backend/tests/test_etapa7.py
+  frontend/package-lock.json
+  frontend/public/favicon.svg
+  frontend/src/api.js                   # cliente JWT, errores y descargas
+  frontend/src/auth.jsx                 # sesión en sessionStorage y guardas
+  frontend/src/formato.js               # fechas, estados, tamaños y etiquetas
+  frontend/src/components/Comunes.jsx
+  frontend/src/components/Layout.jsx
+  frontend/src/components/BuscadorRut.jsx
+  frontend/src/components/DocumentosAtencion.jsx
+  frontend/src/pages/{Login,Dashboard,Usuarios,Profesionales,Pacientes,Citas,
+                      Atenciones,Documentos}.jsx
 ```
 
 ### 8.3. Solo local (no versionado)
@@ -431,6 +516,10 @@ docker compose exec backend alembic check
 docker compose exec backend pytest
 docker compose exec backend pytest tests/test_etapa7.py -v
 
+docker compose exec frontend npm install
+docker compose exec frontend npm audit
+docker compose exec frontend npm run build
+
 docker compose exec backend python -m app.cli.crear_admin \
   --rut 11111111-1 --nombres Ana --apellidos Administradora \
   --correo ana@ejemplo.cl
@@ -450,7 +539,7 @@ backend (`docker compose build backend` + `docker compose up -d backend`).
 
 ---
 
-## 11. Cierre de las Etapas 5, 6 y 7
+## 11. Cierre de las Etapas 5 a 8
 
 ### Etapa 5 — Citas y agenda
 
@@ -498,37 +587,57 @@ backend (`docker compose build backend` + `docker compose up -d backend`).
 | Borrado solo por el autor | Cumplido (403/404) |
 | Archivo físico eliminado con el registro | Cumplido (volumen vacío) |
 | Pruebas propias | 14 passed |
-| Commit de la etapa | **Pendiente de autorización** |
+| Commit de la etapa | Cumplido (`a732633`) |
 
-`alembic check` responde «No new upgrade operations detected»: las Etapas 5, 6
-y 7 no introdujeron cambios de esquema.
+`alembic check` responde «No new upgrade operations detected»: las Etapas 5 a 8
+no introdujeron cambios de esquema.
+
+### Etapa 8 — Frontend completo
+
+| Criterio | Estado |
+|---|---|
+| Login y sesión con token en `sessionStorage` | Cumplido |
+| Rutas protegidas y por rol | Cumplido (`/usuarios` solo administrador) |
+| Dashboard con contadores de la API actual | Cumplido |
+| Usuarios (solo administrador) | Cumplido |
+| Profesionales y pacientes con filtros y paginación | Cumplido |
+| Citas: alta, confirmación, cancelación y ausencia | Cumplido |
+| Atención desde cita confirmada y corrección del registro | Cumplido |
+| Autocompletado por RUT con búsqueda en vivo | Cumplido |
+| Subida de documentos desde atención y paciente | Cumplido |
+| Descarga autenticada con nombre original | Cumplido |
+| Borrado de documentos solo por el autor | Cumplido |
+| Mensajes de error uniformes y 401 | Cumplido |
+| `npm run build` | Correcto (Vite 6.4.5) |
+| `npm audit` | 0 vulnerabilidades |
+| Flujo E2E en navegador real | 12 comprobaciones correctas (sección 4.11) |
+| Commit de la etapa | Cumplido |
+
+La Etapa 8 no modificó el backend ni el esquema; `alembic check` sigue limpio.
 
 ---
 
-## 12. Siguiente etapa propuesta: Etapa 8 — Frontend completo
+## 12. Siguiente etapa propuesta: Etapa 9 — Integración y cierre
 
-**Objetivo:** construir la interfaz React que consuma los endpoints ya
-verificados: login, navegación por rol, dashboards, tablas con filtros y
-paginación, formularios de pacientes, profesionales, citas, atenciones y
-documentos, con autocompletado por RUT.
+**Objetivo:** consolidar el MVP: pruebas de extremo a extremo documentadas,
+respaldo y restauración de base de datos y volumen de documentos, revisión de
+seguridad operativa, documentación final y criterios de despliegue.
 
 **Decisiones a consultar antes de implementar:**
 
-1. Enrutamiento y estado de sesión: ¿React Router y almacenamiento del token en
-   `localStorage`, o estado en memoria con cierre de sesión al recargar?
-2. Estructura de navegación: ¿sidebar fijo por rol, pestañas o rutas anidadas?
-3. Contenido exacto de los dashboards (métricas, «actividad reciente», períodos).
-4. Campos y filtros visibles en cada tabla; comportamiento de la paginación.
-5. Autocompletado por RUT: ¿consulta al listado de pacientes/profesionales con
-   búsqueda parcial, o entrada manual validada?
-6. Subida de documentos desde el navegador: ¿solo desde la ficha de atención,
-   también desde la ficha del paciente?
-7. Manejo de expiración del token (480 minutos), mensajes de error y
-   confirmaciones de borrado.
-8. Diseño visual: ¿se reutiliza `index.css` con un estilo propio o se incorpora
-   una biblioteca de componentes?
+1. **Alcance de la integración:** ¿se versiona una suite E2E (por ejemplo
+   Playwright) o basta la verificación manual documentada?
+2. **Respaldo:** ¿`pg_dump` + copia del volumen de documentos con script y
+   restauración probada, o solo documentar el procedimiento?
+3. **Datos de demostración:** ¿se mantiene la base vacía salvo cuentas, o se
+   agrega un `seed` sintético reproducible?
+4. **Documentación final:** ¿README ampliado, manual de usuario breve, o ambos?
+5. **Despliegue:** ¿solo local con Docker Compose, o guía para un servidor
+   municipal (HTTPS, proxy inverso, secretos)?
+6. **Seguridad pendiente:** política de contraseñas, recuperación de acceso,
+   auditoría/retención y antivirus de archivos.
 
-**Requisito previo:** cerrado salvo el commit de la Etapa 7.
+**Requisito previo:** cerrado (commit de cierre de la Etapa 8).
 
 ---
 
@@ -557,15 +666,23 @@ documentos, con autocompletado por RUT.
 | 29-10-2026 | `pytest tests/test_etapa7.py` | 14 passed |
 | 29-10-2026 | `pytest` (suite completa) | **133 passed**, 1 warning |
 | 29-10-2026 | Verificación manual por HTTP de la Etapa 7 | 11 comprobaciones correctas, volumen vacío (sección 4.10) |
+| 02-11-2026 | `npm install` + `npm audit` del frontend | 0 vulnerabilidades |
+| 02-11-2026 | `npm run build` (Vite 6.4.5) | Correcto, 54 módulos |
+| 02-11-2026 | `pytest` (suite completa, sin cambios de backend) | **133 passed**, 1 warning |
+| 02-11-2026 | `alembic check` tras la Etapa 8 | «No new upgrade operations detected» |
+| 02-11-2026 | Flujo E2E en Chrome headless (Etapa 8) | 12 comprobaciones correctas, sin errores de consola |
+| 02-11-2026 | Limpieza de datos E2E y volumen | 0 filas sintéticas; volumen vacío |
 
 ---
 
 ## 14. Notas y advertencias
 
 - El contenedor `diss_backend` ejecuta el código del árbol de trabajo mediante
-  `uvicorn --reload`, aunque git HEAD no tenga la Etapa 7.
+  `uvicorn --reload`; el contenedor `diss_frontend` usa Vite dev con bind mount.
 - La imagen del backend fue reconstruida para incluir `python-multipart`; un
   `docker compose up` sin `--build` puede dejar la dependencia ausente.
+- El frontend incorpora `react-router-dom` y Vite 6.4.5; tras cambiar
+  `package.json` hay que ejecutar `npm install` y reiniciar el contenedor.
 - No hay repositorio remoto ni nada publicado en GitHub.
 - El proyecto `aplicacion_SSEE` no ha sido modificado ni consultado.
 - No se usan datos clínicos reales; todos los datos de prueba son sintéticos.
