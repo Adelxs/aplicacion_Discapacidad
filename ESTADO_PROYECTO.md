@@ -14,13 +14,14 @@
 | Aspecto | Estado real |
 |---|---|
 | Entorno Docker (PostgreSQL + FastAPI + React) | Funcionando, 3 servicios arriba |
+| Base de datos externa | **Neon Free conectada**; migración `0001_esquema_inicial` aplicada |
 | Migración inicial aplicada | Sí (`0001_esquema_inicial`, head) |
 | Etapas 1 a 9 | Completadas, probadas y verificadas |
 | Etapa 7 (documentos) | **Completada y verificada** (commit `a732633`) |
 | Etapa 8 (frontend) | **Completada y verificada en navegador** (commit de cierre de la Etapa 8) |
 | Etapa 9 (cierre) | **Completada**: suite E2E versionada, respaldo verificado y documentación final |
 | Repositorio remoto (GitHub) | **Publicado**: <https://github.com/Adelxs/aplicacion_Discapacidad> |
-| Último commit | Preparación para publicación (`0457495`) |
+| Último commit | Conexión del backend a Neon y documentación (03-11-2026) |
 | Cambios de Etapa 9 en git | **Commiteados**; árbol de trabajo limpio |
 
 **Resultado de la última ejecución completa de pruebas del backend (02-11-2026):**
@@ -598,6 +599,27 @@ e2e/test-results/           # trazas y capturas de fallos
 Todas las citas, atenciones, pacientes y documentos usados en las
 verificaciones se eliminaron al terminar. El volumen de documentos quedó vacío.
 No hay datos clínicos reales.
+
+### 9.1. Base externa (Neon)
+
+El backend toma `DATABASE_URL` desde `.env` y la normaliza a
+`postgresql+psycopg://`. Al estar definida, Docker Compose deja de usar la base
+local del servicio `db` para el backend; esa base queda como respaldo.
+
+Verificación del 03-11-2026 contra Neon:
+
+| Comprobación | Resultado |
+|---|---|
+| `/api/v1/health/db` | `ok`, motor `postgresql` |
+| `alembic current` | `0001_esquema_inicial (head)` |
+| Login administrador (`11111111-1`) | Correcto |
+| Login profesional (`12345678-5`) | Correcto |
+| Filas: usuarios / profesionales | 2 / 1 |
+| Filas clínicas (pacientes, citas, atenciones, documentos) | 0 |
+
+El plan Neon Free es permanente dentro de sus límites (1 GB por proyecto,
+100 CU-horas al mes y suspensión por inactividad). No expira a los 30 días como
+la base gratuita de Render y no borra datos al alcanzar el límite.
 
 ---
 

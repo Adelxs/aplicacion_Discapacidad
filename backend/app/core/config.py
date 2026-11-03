@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,6 +20,19 @@ class Settings(BaseSettings):
     zona_horaria: str = "America/Santiago"
 
     database_url: str = "postgresql+psycopg://postgres:postgres@db:5432/citas"
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def _normalizar_database_url(cls, valor: object) -> object:
+        # Neon, Render y otros proveedores entregan la URL con el esquema
+        # "postgresql://", que SQLAlchemy interpreta como psycopg2. La app usa
+        # psycopg 3, por lo que se normaliza el esquema automaticamente.
+        if isinstance(valor, str):
+            if valor.startswith("postgresql://"):
+                return "postgresql+psycopg://" + valor[len("postgresql://") :]
+            if valor.startswith("postgres://"):
+                return "postgresql+psycopg://" + valor[len("postgres://") :]
+        return valor
 
     secret_key: str = "cambiar-en-entorno-real"
     jwt_algorithm: str = "HS256"

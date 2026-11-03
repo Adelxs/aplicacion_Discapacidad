@@ -195,15 +195,41 @@ Recomendaciones:
 
 | Variable | Descripción |
 |---|---|
-| `POSTGRES_DB` | Nombre de la base de datos. |
-| `POSTGRES_USER` | Usuario de la base de datos. |
-| `POSTGRES_PASSWORD` | Contraseña de la base de datos. No se versiona. |
+| `DATABASE_URL` | Cadena de conexión completa. Si se define, tiene prioridad sobre la base local de Docker Compose. |
+| `POSTGRES_DB` | Nombre de la base de datos local (respaldo cuando no hay `DATABASE_URL`). |
+| `POSTGRES_USER` | Usuario de la base de datos local. |
+| `POSTGRES_PASSWORD` | Contraseña de la base de datos local. No se versiona. |
 | `SECRET_KEY` | Secreto para la firma de JWT. |
 | `ENTORNO` | `desarrollo`, `pruebas` o `produccion`. |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | Vigencia del token de acceso (480 por defecto). |
 | `MAX_DOCUMENTO_MB` | Tamaño máximo permitido por documento (10 por defecto). |
 | `VITE_API_URL` | URL base de la API consumida por el frontend. |
 | `VITE_ALLOWED_HOSTS` | Hosts permitidos por Vite, separados por coma. Por defecto `aplicacion-discapacidad.onrender.com`. |
+
+### Base de datos externa (Neon)
+
+Para usar una base PostgreSQL administrada, defina `DATABASE_URL` en `.env`:
+
+```text
+DATABASE_URL=postgresql://USUARIO:CLAVE@HOST/BASE?sslmode=require
+```
+
+El backend acepta los esquemas `postgresql://`, `postgres://` y
+`postgresql+psycopg://`; los dos primeros se normalizan automáticamente a
+psycopg 3. Al definir `DATABASE_URL`, Docker Compose deja de usar la base local
+del servicio `db` para el backend.
+
+Aplicar migraciones y crear la cuenta administradora contra esa base:
+
+```powershell
+docker compose exec backend alembic upgrade head
+docker compose exec backend python -m app.cli.crear_admin --rut 11111111-1 --nombres Ana --apellidos Administradora --correo ana@ejemplo.cl
+```
+
+El plan gratuito de Neon es permanente dentro de sus límites (1 GB por
+proyecto, 100 CU-horas al mes y suspensión por inactividad). No es una prueba
+de 30 días y no borra los datos al alcanzar el límite. Para datos clínicos
+reales se requiere un plan con respaldos y acuerdo de tratamiento de datos.
 
 ### Nota para desplegar en Render
 
