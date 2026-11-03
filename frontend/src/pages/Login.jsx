@@ -43,7 +43,7 @@ export default function Login() {
           S
         </span>
         <p className="login__etiqueta">Municipalidad · Salud</p>
-        <h1>Sistema Municipal de Citas y Atenciones</h1>
+        <h1>Programa Discapacidad</h1>
         <p>
           Acceso reservado para funcionarios autorizados. La información clínica
           y los documentos adjuntos son confidenciales.
