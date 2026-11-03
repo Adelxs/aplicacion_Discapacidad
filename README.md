@@ -203,6 +203,20 @@ Recomendaciones:
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | Vigencia del token de acceso (480 por defecto). |
 | `MAX_DOCUMENTO_MB` | Tamaño máximo permitido por documento (10 por defecto). |
 | `VITE_API_URL` | URL base de la API consumida por el frontend. |
+| `VITE_ALLOWED_HOSTS` | Hosts permitidos por Vite, separados por coma. Por defecto `aplicacion-discapacidad.onrender.com`. |
+
+### Nota para desplegar en Render
+
+El contenedor del frontend ejecuta Vite en modo desarrollo. Para publicarlo:
+
+- Defina `VITE_ALLOWED_HOSTS` con el dominio público del frontend (por ejemplo,
+  `aplicacion-discapacidad.onrender.com`).
+- Defina `VITE_API_URL` con la URL pública del backend; si no, el navegador
+  intentará `http://localhost:8000`.
+- En el backend, defina `CORS_ORIGINS` con el origen público del frontend, por
+  ejemplo `["https://aplicacion-discapacidad.onrender.com"]`.
+- El disco de Render es efímero: sin un disco persistente, los documentos
+  subidos se pierden al reiniciar el servicio.
 
 Generar un secreto nuevo:
 
