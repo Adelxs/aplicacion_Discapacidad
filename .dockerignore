@@ -1,0 +1,36 @@
+# Archivos que no deben enviarse al contexto de build de Docker.
+# No sustituye a .gitignore: sirve para reducir el contexto y evitar secretos
+# dentro de la imagen.
+
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+
+# Documentación y datos locales
+respaldos/
+*.dump
+*.sql
+*.backup
+MANUAL_USUARIO.md
+ESTADO_PROYECTO.md
+
+# Dependencias y artefactos
+**/node_modules
+**/dist
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.venv
+**/playwright-report
+**/test-results
+**/blob-report
+
+# Claves y certificados privados
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+.secrets/

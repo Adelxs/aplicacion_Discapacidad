@@ -35,3 +35,14 @@ Thumbs.db
 *.sql
 *.dump
 *.backup
+*.sqlite
+*.sqlite3
+*.db
+
+# Claves y certificados privados
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+.secrets/
