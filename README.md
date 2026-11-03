@@ -104,6 +104,13 @@ Las pruebas de integración crean una base aparte (`citas_municipales_test`),
 aplican las migraciones desde cero y la eliminan al terminar. Nunca usan la base
 de desarrollo ni datos reales.
 
+Si `DATABASE_URL` apunta a un proveedor externo (Neon), ejecute las pruebas
+contra la base local para no crear bases temporales en el proveedor:
+
+```powershell
+docker compose run --rm -e DATABASE_URL="postgresql+psycopg://citas_app:CLAVE_LOCAL@db:5432/citas_municipales" backend pytest
+```
+
 Resultado de referencia al cierre: **133 passed, 1 warning**.
 
 ### Frontend

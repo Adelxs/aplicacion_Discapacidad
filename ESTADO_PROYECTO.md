@@ -632,8 +632,13 @@ docker compose exec backend alembic upgrade head
 docker compose exec backend alembic current
 docker compose exec backend alembic check
 
-docker compose exec backend pytest
-docker compose exec backend pytest tests/test_etapa7.py -v
+# Con DATABASE_URL externa, las pruebas deben apuntar a la base local:
+docker compose run --rm \
+  -e DATABASE_URL="postgresql+psycopg://citas_app:CLAVE_LOCAL@db:5432/citas_municipales" \
+  backend pytest
+docker compose run --rm \
+  -e DATABASE_URL="postgresql+psycopg://citas_app:CLAVE_LOCAL@db:5432/citas_municipales" \
+  backend pytest tests/test_etapa7.py -v
 
 docker compose exec frontend npm install
 docker compose exec frontend npm audit
