@@ -1,5 +1,8 @@
 
-const API_URL = import.meta.env.VITE_API_URL ?? "https://aplicacion-discapacidad-1.onrender.com/";
+// Se quitan las barras finales para no generar rutas con "//".
+const API_URL = (
+  import.meta.env.VITE_API_URL ?? "https://aplicacion-discapacidad-1.onrender.com"
+).replace(/\/+$/, "");
 
 let tokenActual = null;
 
