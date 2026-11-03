@@ -19,8 +19,8 @@
 | Etapa 7 (documentos) | **Completada y verificada** (commit `a732633`) |
 | Etapa 8 (frontend) | **Completada y verificada en navegador** (commit de cierre de la Etapa 8) |
 | Etapa 9 (cierre) | **Completada**: suite E2E versionada, respaldo verificado y documentación final |
-| Repositorio remoto (GitHub) | **No existe**; solo repositorio local |
-| Último commit | Cierre de la Etapa 9 |
+| Repositorio remoto (GitHub) | **Publicado**: <https://github.com/Adelxs/aplicacion_Discapacidad> |
+| Último commit | Preparación para publicación (`0457495`) |
 | Cambios de Etapa 9 en git | **Commiteados**; árbol de trabajo limpio |
 
 **Resultado de la última ejecución completa de pruebas del backend (02-11-2026):**
@@ -811,6 +811,7 @@ final y criterios de operación.
 | 02-11-2026 | `respaldo.ps1 -Verificar` con 1 documento sintético | Conteos idénticos; contenido idéntico |
 | 02-11-2026 | Sintaxis de `respaldo.ps1` y `restauracion.ps1` | Correcta (parser de PowerShell) |
 | 02-11-2026 | `restauracion.ps1` sin `-Confirmar` | Cancela sin tocar datos; código 1 |
+| 03-11-2026 | Publicación en GitHub | `main` subida; `.env` y claves fuera del repositorio |
 
 ---
 
@@ -822,7 +823,8 @@ final y criterios de operación.
   `docker compose up` sin `--build` puede dejar la dependencia ausente.
 - El frontend incorpora `react-router-dom` y Vite 6.4.5; tras cambiar
   `package.json` hay que ejecutar `npm install` y reiniciar el contenedor.
-- No hay repositorio remoto ni nada publicado en GitHub.
+- El repositorio remoto es <https://github.com/Adelxs/aplicacion_Discapacidad>;
+  la rama `main` está publicada y no se versionan `.env`, respaldos ni claves.
 - El proyecto `aplicacion_SSEE` no ha sido modificado ni consultado.
 - No se usan datos clínicos reales; todos los datos de prueba son sintéticos.
 - No se deben ejecutar `docker compose down -v` ni `alembic downgrade` sin

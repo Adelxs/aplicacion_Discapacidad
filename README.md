@@ -7,6 +7,8 @@ Repositorio independiente del proyecto `aplicacion_SSEE`. No se reutiliza códig
 configuración ni datos de ese proyecto. Todo el desarrollo usa datos sintéticos:
 **no debe cargarse información clínica real**.
 
+Repositorio: <https://github.com/Adelxs/aplicacion_Discapacidad>.
+
 ## Estado
 
 Las nueve etapas del MVP están completas y verificadas. El detalle de pruebas,
