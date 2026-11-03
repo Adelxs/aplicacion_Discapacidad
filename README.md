@@ -1,45 +1,64 @@
 # Sistema Municipal de Gestión de Citas y Atenciones — MVP
 
-Aplicación web para la administración de pacientes, profesionales, citas, atenciones y
+Aplicación web para administrar pacientes, profesionales, citas, atenciones y
 documentos de un centro municipal o comunitario de atención.
 
 Repositorio independiente del proyecto `aplicacion_SSEE`. No se reutiliza código,
-configuración ni datos de ese proyecto.
+configuración ni datos de ese proyecto. Todo el desarrollo usa datos sintéticos:
+**no debe cargarse información clínica real**.
+
+## Estado
+
+Las nueve etapas del MVP están completas y verificadas. El detalle de pruebas,
+decisiones y limitaciones está en [`ESTADO_PROYECTO.md`](ESTADO_PROYECTO.md).
+El uso por rol se describe en [`MANUAL_USUARIO.md`](MANUAL_USUARIO.md).
 
 ## Stack
 
 | Componente | Tecnología |
 |---|---|
-| Frontend | React 18 + Vite |
-| Backend | FastAPI (Python 3.12) |
+| Frontend | React 18.3.1 + Vite 6.4.5 + React Router 7.18.5 |
+| Backend | FastAPI 0.115.6 (Python 3.12) |
 | Base de datos | PostgreSQL 17 |
 | ORM / migraciones | SQLAlchemy 2 + Alembic |
-| Autenticación | JWT Bearer (Etapa 3) |
+| Autenticación | JWT Bearer (HS256) + Argon2id |
 | Contenedores | Docker + Docker Compose |
 
 ## Requisitos
 
 - Docker Desktop con Docker Compose v2 o superior.
-- Puerto libre: `8000` (API), `5173` (frontend), `5433` (PostgreSQL en el host).
-- El puerto `5433` se usa porque `5432` suele estar ocupado por un PostgreSQL local.
+- Puertos libres: `8000` (API), `5173` (frontend) y `5433` (PostgreSQL en el
+  host). El puerto `5433` se usa porque `5432` suele estar ocupado por un
+  PostgreSQL local.
+- Para las pruebas E2E: Node.js 20 o superior y Chrome o Edge instalado.
 
 ## Puesta en marcha
 
-```bash
-cp .env.example .env
+```powershell
+Copy-Item .env.example .env
 # Editar .env y definir POSTGRES_PASSWORD y SECRET_KEY propias.
-docker compose up --build
+docker compose up -d --build
+docker compose exec backend alembic upgrade head
 ```
 
-Con el entorno levantado:
+Crear la cuenta administradora inicial (no hay registro público):
+
+```powershell
+docker compose exec backend python -m app.cli.crear_admin --rut 11111111-1 --nombres Ana --apellidos Administradora --correo ana@ejemplo.cl
+```
+
+La contraseña se solicita de forma interactiva y no queda en el historial de
+comandos. Después se ingresa en <http://localhost:5173> y, desde la interfaz, el
+administrador puede crear las demás cuentas, los perfiles profesionales y los
+pacientes.
 
 | Servicio | URL |
 |---|---|
-| Frontend | http://localhost:5173 |
-| API | http://localhost:8000 |
-| Documentación OpenAPI | http://localhost:8000/docs |
-| Salud del servicio | http://localhost:8000/api/v1/health |
-| Salud de la base de datos | http://localhost:8000/api/v1/health/db |
+| Frontend | <http://localhost:5173> |
+| API | <http://localhost:8000> |
+| Documentación OpenAPI | <http://localhost:8000/docs> |
+| Salud del servicio | <http://localhost:8000/api/v1/health> |
+| Salud de la base de datos | <http://localhost:8000/api/v1/health/db> |
 | PostgreSQL (host) | `localhost:5433` |
 
 Detener el entorno sin borrar datos:
@@ -48,84 +67,127 @@ Detener el entorno sin borrar datos:
 docker compose down
 ```
 
-Detener y eliminar volúmenes (**destructivo**, borra base de datos y documentos):
+`docker compose down -v` elimina la base de datos y los documentos. Es
+**destructivo** y no debe ejecutarse sin autorización explícita.
 
-```bash
-docker compose down -v
-```
+## Roles y alcance
 
-## Base de datos y migraciones
+| Rol | Puede |
+|---|---|
+| Administrador | Gestionar usuarios, profesionales y pacientes; consultar toda la agenda y las atenciones; anotar observaciones administrativas; subir documentos y descargar cualquiera; eliminar solo los documentos que subió |
+| Profesional | Gestionar su propia agenda; registrar y corregir sus atenciones; consultar pacientes y profesionales; subir documentos a sus atenciones o a un paciente; descargar lo que le corresponde; eliminar solo lo que subió |
 
-La primera vez (y tras cada nueva migración) hay que aplicar el esquema:
+Reglas relevantes:
 
-```bash
-docker compose exec backend alembic upgrade head
-```
-
-Otros comandos útiles:
-
-```bash
-# Version aplicada actualmente
-docker compose exec backend alembic current
-
-# Verificar que los modelos ORM coinciden con la base de datos
-docker compose exec backend alembic check
-
-# Crear una migracion nueva tras cambiar los modelos (revisar el archivo generado)
-docker compose exec backend alembic revision --autogenerate -m "descripcion del cambio"
-```
-
-Reglas de la Etapa 2 reflejadas en el esquema:
-
-- RUT canonico (`12345678-9`, sin puntos) validado por restriccion `CHECK`.
-- Una cita no puede terminar antes de empezar.
-- Estados de cita limitados a los cinco permitidos.
-- Una atencion por cita y coherencia de paciente/profesional con la cita.
-- Documentos asociados a una atencion deben pertenecer al mismo paciente.
-- Solapamientos de agenda bloqueados en la base de datos con
-  `EXCLUDE USING gist`, incluidas solicitudes concurrentes. Las citas canceladas
-  liberan el horario.
-- Pacientes con historial (`citas`, `atenciones`, `documentos`) no pueden
-  eliminarse fisicamente (`ON DELETE RESTRICT`).
-
-## Autenticación
-
-| Método | Endpoint | Función |
-|---|---|---|
-| POST | `/api/v1/auth/login` | Autentica con RUT y contraseña. |
-| GET | `/api/v1/auth/me` | Devuelve la identidad del usuario autenticado. |
-
-- Contraseñas almacenadas con **Argon2id**; nunca en texto plano.
-- Token **JWT** firmado con `HS256` y `SECRET_KEY`, con expiración obligatoria.
-- El token solo contiene `sub` (RUT), `rol`, `iat` y `exp`: sin contraseñas ni
-  información clínica.
-- Los mensajes de error de login no revelan si el RUT existe.
-- Una cuenta desactivada pierde acceso de inmediato, aunque su token siga vigente.
-- La autorización por rol se verifica en el backend con la dependencia
-  `requiere_roles`; ocultar botones en React no sustituye ese control.
-
-### Crear la cuenta administradora inicial
-
-No hay registro público: la primera cuenta se crea por consola.
-
-```bash
-docker compose exec backend python -m app.cli.crear_admin \
-  --rut 11111111-1 --nombres Ana --apellidos Administradora \
-  --correo ana@ejemplo.cl
-```
-
-La contraseña se solicita de forma interactiva, de modo que no queda en el
-historial de comandos ni en los logs.
+- El administrador **no** crea, confirma, cancela ni registra atenciones.
+- El profesional solo ve sus citas y atenciones; un recurso ajeno responde 404.
+- Una atención solo se registra desde una cita confirmada y el profesional debe
+  ser su dueño.
+- Los pacientes con historial (citas, atenciones o documentos) no se eliminan.
+- Los documentos aceptados son PDF, JPEG y PNG de hasta 10 MB, validados por el
+  contenido real del archivo.
+- Un documento puede existir sin atención, ligado solo al paciente. Los
+  documentos sin atención subidos por el administrador no son visibles para los
+  profesionales.
 
 ## Pruebas automatizadas
 
+### Backend
+
 ```bash
-docker compose exec backend pytest -v
+docker compose exec backend pytest
 ```
 
-Las pruebas de integracion crean una base de datos aparte
-(`citas_municipales_test`), aplican las migraciones desde cero y la eliminan al
-terminar. Nunca usan la base de datos de desarrollo ni datos reales.
+Las pruebas de integración crean una base aparte (`citas_municipales_test`),
+aplican las migraciones desde cero y la eliminan al terminar. Nunca usan la base
+de desarrollo ni datos reales.
+
+Resultado de referencia al cierre: **133 passed, 1 warning**.
+
+### Frontend
+
+```bash
+docker compose exec frontend npm audit
+docker compose exec frontend npm run build
+```
+
+Resultado de referencia: **0 vulnerabilidades** y build de producción correcto.
+
+### Pruebas de extremo a extremo (E2E)
+
+Requieren el entorno Docker levantado y las cuentas sintéticas existentes. La
+suite usa Chrome por defecto, crea un paciente de prueba, recorre el flujo
+completo y elimina sus datos y archivos al terminar.
+
+```bash
+cd e2e
+npm install
+
+$env:DISS_E2E_ADMIN_PASSWORD = "clave-del-administrador"
+$env:DISS_E2E_PROF_PASSWORD  = "clave-del-profesional"
+npx playwright test
+```
+
+Variables disponibles:
+
+| Variable | Valor por defecto | Uso |
+|---|---|---|
+| `DISS_E2E_BASE_URL` | `http://localhost:5173` | URL del frontend |
+| `DISS_E2E_ADMIN_RUT` | `11111111-1` | Cuenta administradora |
+| `DISS_E2E_ADMIN_PASSWORD` | — (obligatoria) | Contraseña del administrador |
+| `DISS_E2E_PROF_RUT` | `12345678-5` | Cuenta profesional |
+| `DISS_E2E_PROF_PASSWORD` | — (obligatoria) | Contraseña del profesional |
+| `PLAYWRIGHT_CHANNEL` | `chrome` | `chrome`, `msedge` o `chromium` |
+| `DISS_DB_USER` | `citas_app` | Usuario usado por la limpieza |
+| `DISS_DB_NAME` | `citas_municipales` | Base usada por la limpieza |
+
+Si no hay Chrome instalado:
+
+```bash
+npx playwright install chromium
+$env:PLAYWRIGHT_CHANNEL = "chromium"
+```
+
+La suite usa el RUT sintético `77777777-7` y borra únicamente esos datos
+(`documentos`, `atenciones`, `citas` y `paciente`) antes y después de ejecutar.
+El informe HTML queda en `e2e/playwright-report/` (no versionado).
+
+## Respaldo y restauración
+
+Los respaldos incluyen la base de datos (`pg_dump` en formato custom) y el
+volumen privado de documentos (`tar.gz`), más un manifiesto con sus hashes
+SHA256. Se guardan en `respaldos/`, que no se versiona.
+
+Crear un respaldo:
+
+```powershell
+.\scripts\respaldo.ps1
+```
+
+Crear un respaldo y **verificar la restauración** en una base y un directorio
+temporales, comparando conteos de tablas y el contenido de los documentos:
+
+```powershell
+.\scripts\respaldo.ps1 -Verificar
+```
+
+Restaurar un respaldo sobre el entorno actual (**reemplaza** la base y los
+documentos; el script detiene el backend durante la operación):
+
+```powershell
+.\scripts\restauracion.ps1 `
+  -Base .\respaldos\base_20261102_120000.dump `
+  -Documentos .\respaldos\documentos_20261102_120000.tar.gz `
+  -Confirmar
+```
+
+Recomendaciones:
+
+- Copiar los respaldos a otro equipo o medio; el volumen de Docker no es un
+  respaldo.
+- Verificar cada respaldo con `-Verificar` antes de confiar en él.
+- Probar la restauración completa en un entorno separado antes de un uso real.
+- Proteger los respaldos: contienen datos personales y clínicos.
 
 ## Variables de entorno
 
@@ -136,22 +198,25 @@ terminar. Nunca usan la base de datos de desarrollo ni datos reales.
 | `POSTGRES_PASSWORD` | Contraseña de la base de datos. No se versiona. |
 | `SECRET_KEY` | Secreto para la firma de JWT. |
 | `ENTORNO` | `desarrollo`, `pruebas` o `produccion`. |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | Vigencia del token de acceso en minutos (480 por defecto). |
-| `MAX_DOCUMENTO_MB` | Tamaño máximo permitido por documento. |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | Vigencia del token de acceso (480 por defecto). |
+| `MAX_DOCUMENTO_MB` | Tamaño máximo permitido por documento (10 por defecto). |
 | `VITE_API_URL` | URL base de la API consumida por el frontend. |
 
 Generar un secreto nuevo:
 
-```bash
-python -c "import secrets; print(secrets.token_urlsafe(48))"
+```powershell
+docker compose exec backend python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
 ## Estructura del proyecto
 
-```
+```text
 aplicacion_DISS/
 ├─ docker-compose.yml
 ├─ .env.example
+├─ README.md
+├─ MANUAL_USUARIO.md
+├─ ESTADO_PROYECTO.md
 ├─ backend/
 │  ├─ Dockerfile
 │  ├─ requirements.txt
@@ -160,21 +225,28 @@ aplicacion_DISS/
 │  ├─ tests/                   # Pruebas pytest
 │  └─ app/
 │     ├─ main.py               # Aplicación FastAPI
-│     ├─ core/config.py        # Configuración desde variables de entorno
-│     ├─ core/errors.py        # Manejo uniforme de errores
-│     ├─ core/rut.py           # Normalización y validación de RUT
-│     ├─ core/security.py      # Argon2id y JWT
-│     ├─ api/deps.py           # Autenticación y autorización por rol
-│     ├─ schemas/              # Esquemas Pydantic de entrada/salida
-│     ├─ cli/                  # Comandos administrativos (crear_admin)
-│     ├─ db/base.py            # Base declarativa de SQLAlchemy
-│     ├─ db/session.py         # Motor y sesiones
-│     ├─ models/               # Modelos ORM (una entidad por archivo)
-│     └─ api/v1/               # Rutas de la API v1
-└─ frontend/
-   ├─ Dockerfile
-   ├─ vite.config.js
-   └─ src/                     # Aplicación React
+│     ├─ core/                 # Configuración, errores, RUT, seguridad y tiempo
+│     ├─ api/                  # Dependencias y rutas de la API v1
+│     ├─ schemas/              # Esquemas Pydantic de entrada y salida
+│     ├─ services/             # Lógica de negocio
+│     ├─ models/               # Modelos ORM
+│     ├─ cli/                  # Comandos administrativos
+│     └─ db/                   # Motor y sesiones de SQLAlchemy
+├─ frontend/
+│  ├─ Dockerfile
+│  ├─ vite.config.js
+│  └─ src/
+│     ├─ api.js                # Cliente HTTP con JWT
+│     ├─ auth.jsx              # Sesión y guardas de ruta
+│     ├─ components/           # Layout, componentes comunes y documentos
+│     └─ pages/                # Login, resumen, citas, atenciones, etc.
+├─ e2e/                        # Suite Playwright versionada
+│  ├─ playwright.config.js
+│  ├─ limpieza.js
+│  └─ pruebas/
+└─ scripts/
+   ├─ respaldo.ps1
+   └─ restauracion.ps1
 ```
 
 ## Volúmenes persistentes
@@ -184,26 +256,29 @@ aplicacion_DISS/
 | `diss_postgres_data` | Datos de PostgreSQL. |
 | `diss_documentos_data` | Archivos de documentos (acceso privado, fuera de PostgreSQL). |
 
-Los volúmenes **no sustituyen** a las copias de seguridad. El procedimiento de respaldo y
-restauración se documentará en la etapa de integración.
+Los volúmenes **no sustituyen** a las copias de seguridad. Use los scripts de
+respaldo y restauración descritos arriba.
 
-## Estado de implementación
+## Seguridad y limitaciones
 
-| Etapa | Descripción | Estado |
-|---|---|---|
-| 1 | Estructura, configuración, Docker Compose y salud | Completada |
-| 2 | Modelos ORM y migraciones Alembic | Completada |
-| 3 | Autenticación y autorización | Completada |
-| 4 | Usuarios, profesionales y pacientes | Pendiente |
-| 5 | Citas y agenda | Pendiente |
-| 6 | Atenciones | Pendiente |
-| 7 | Documentos | Pendiente |
-| 8 | Frontend completo | Pendiente |
-| 9 | Integración, pruebas y cierre | Pendiente |
+- No hay registro público ni recuperación de contraseña; un administrador debe
+  crear las cuentas y asignar una contraseña inicial.
+- La sesión del frontend usa `sessionStorage`: sobrevive a recargas, pero no al
+  cierre de la pestaña. El token expira según `ACCESS_TOKEN_EXPIRE_MINUTES`.
+- El backend aplica permisos por rol y por propietario; ocultar opciones en la
+  interfaz no sustituye esos controles.
+- No hay auditoría de cambios ni traza de versiones anteriores de un registro
+  clínico corregido.
+- No hay análisis antivirus de los archivos subidos ni política de retención.
+- El MVP está preparado para ejecución local con Docker Compose; no incluye
+  HTTPS, proxy inverso, alta disponibilidad ni despliegue en servidor.
+- Las pruebas de concurrencia se apoyan en restricciones de la base de datos;
+  no se lanzan cargas concurrentes reales.
 
 ## Advertencias
 
 - No usar datos clínicos reales en desarrollo ni en pruebas automatizadas.
-- No versionar `.env` ni secretos.
-- No ejecutar migraciones destructivas ni eliminar volúmenes sin autorización explícita.
+- No versionar `.env`, respaldos ni secretos.
+- No ejecutar `docker compose down -v` ni `alembic downgrade` sin autorización:
+  eliminan datos, archivos o esquema.
 - El proyecto `aplicacion_SSEE` no debe ser modificado.

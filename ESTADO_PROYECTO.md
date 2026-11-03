@@ -1,11 +1,11 @@
 # Estado del proyecto — `aplicacion_DISS`
 
-**Fecha de corte:** 2 de noviembre de 2026
+**Fecha de corte:** 3 de noviembre de 2026
 **Documento de referencia:** Documento Maestro de Especificaciones v1.0
 **Alcance:** Sistema Municipal de Gestión de Citas y Atenciones — MVP
 
 > Este documento refleja únicamente lo verificado hasta la fecha de corte.
-> Las Etapas 1 a 8 están completas, verificadas y con commit.
+> Las Etapas 1 a 9 están completas, verificadas y con commit.
 
 ---
 
@@ -15,23 +15,31 @@
 |---|---|
 | Entorno Docker (PostgreSQL + FastAPI + React) | Funcionando, 3 servicios arriba |
 | Migración inicial aplicada | Sí (`0001_esquema_inicial`, head) |
-| Etapas 1 a 8 | Completadas, probadas y verificadas |
+| Etapas 1 a 9 | Completadas, probadas y verificadas |
 | Etapa 7 (documentos) | **Completada y verificada** (commit `a732633`) |
 | Etapa 8 (frontend) | **Completada y verificada en navegador** (commit de cierre de la Etapa 8) |
-| Etapa 9 | No iniciada |
+| Etapa 9 (cierre) | **Completada**: suite E2E versionada, respaldo verificado y documentación final |
 | Repositorio remoto (GitHub) | **No existe**; solo repositorio local |
-| Último commit | Cierre de la Etapa 8 |
-| Cambios de Etapa 8 en git | **Commiteados**; árbol de trabajo limpio |
+| Último commit | Cierre de la Etapa 9 |
+| Cambios de Etapa 9 en git | **Commiteados**; árbol de trabajo limpio |
 
 **Resultado de la última ejecución completa de pruebas del backend (02-11-2026):**
 
 ```text
-133 passed, 1 warning in 259.50s
+133 passed, 1 warning in 539.56s
 ```
 
 **Verificación del frontend (02-11-2026):** build de producción correcto,
 `npm audit` con **0 vulnerabilidades** y flujo de extremo a extremo en Chrome
 headless sin errores de consola.
+
+**Cierre de la Etapa 9 (02-11-2026):** suite Playwright versionada en `e2e/`
+(1 prueba, 7 pasos, resultado `1 passed`), respaldo con `pg_dump` + `tar.gz` +
+manifiesto SHA256 verificado restaurando en base y directorio temporales
+(conteos `2,1,0,0,0,0,1` y contenido de documentos idéntico), scripts
+`respaldo.ps1` y `restauracion.ps1` con sintaxis validada, y documentación final
+en `README.md` y `MANUAL_USUARIO.md`. La restauración real **no se ejecutó sobre
+los datos de desarrollo**.
 
 ---
 
@@ -67,7 +75,7 @@ headless sin errores de consola.
 | 6. Atenciones | **Completada** | 15 pruebas propias; verificación manual por HTTP |
 | 7. Documentos | **Completada** | 14 pruebas propias; verificación manual por HTTP y volumen |
 | 8. Frontend completo | **Completada** | Build 0 vulnerabilidades; flujo E2E en Chrome headless (sección 4.11) |
-| 9. Integración y cierre | No iniciada | — |
+| 9. Integración y cierre | **Completada** | Suite E2E `1 passed`; respaldo `-Verificar` con conteos y documentos idénticos; documentación final (sección 4.12) |
 
 ---
 
@@ -315,6 +323,57 @@ El volumen de documentos quedó vacío y la base de desarrollo sin datos E2E. La
 capturas de la verificación se conservan fuera del repositorio, en
 `%TEMP%\opencode\frontend-verif`.
 
+### 4.12. Integración y cierre (Etapa 9)
+
+**Suite E2E versionada** en `e2e/` con `@playwright/test` 1.64.1:
+
+- Configuración en `e2e/playwright.config.js`: Chrome del sistema por defecto
+  (`PLAYWRIGHT_CHANNEL` permite `msedge` o `chromium`), `baseURL`
+  `http://localhost:5173`, un worker y traza/captura solo en fallos.
+- Un único recorrido serial en `e2e/pruebas/flujo-completo.spec.js` con 7 pasos:
+  acceso sin sesión y login del administrador; alta de paciente; bloqueo de
+  `/usuarios` para el profesional; creación, confirmación y registro de una
+  cita; persistencia de la sesión al recargar; subida, descarga con bytes
+  idénticos y borrado de un documento; y conflicto 409 al intentar borrar un
+  paciente con historial.
+- `e2e/limpieza.js` elimina, antes y después de la prueba, las filas del RUT
+  sintético `77777777-7` (`documentos`, `atenciones`, `citas` y `pacientes`) y
+  los archivos físicos asociados en `/data/documentos`. Solo toca ese RUT.
+- Las contraseñas se pasan por `DISS_E2E_ADMIN_PASSWORD` y
+  `DISS_E2E_PROF_PASSWORD`; no están en el repositorio.
+
+| Verificación (02-11-2026) | Resultado |
+|---|---|
+| Suite E2E completa con la limpieza reforzada | `1 passed (1.2m)` |
+| Filas del RUT de prueba tras la ejecución | 0 en las cuatro tablas |
+| Volumen `/data/documentos` tras la ejecución | 0 archivos |
+| Base de desarrollo | 2 usuarios, 1 profesional, 0 registros clínicos |
+
+**Respaldo y restauración** (`scripts/respaldo.ps1` y
+`scripts/restauracion.ps1`):
+
+- El respaldo genera un `pg_dump` en formato custom, un `tar.gz` del volumen de
+  documentos y un manifiesto con fecha y hashes SHA256 de ambos archivos.
+- `-Verificar` restaura la base en una base temporal y los documentos en un
+  directorio temporal, compara los conteos de las siete tablas (incluida
+  `alembic_version`) y el hash del contenido de los documentos; luego elimina
+  todo lo temporal.
+- La restauración real reemplaza base y documentos, detiene el backend durante
+  la operación, exige `-Confirmar` y espera a que `/api/v1/health` responda.
+- Se validó la sintaxis de ambos scripts y que `restauracion.ps1` sin
+  `-Confirmar` termina con código 1 sin tocar datos.
+
+| Verificación del respaldo (02-11-2026) | Resultado |
+|---|---|
+| `respaldo.ps1 -Verificar` con el volumen vacío | Conteos `2,1,0,0,0,0,1`; 0 documentos |
+| `respaldo.ps1 -Verificar` con un documento sintético | Conteos idénticos; 1 documento con contenido idéntico |
+| Base y directorios temporales | Eliminados al terminar |
+| `restauracion.ps1` sin `-Confirmar` | Cancela con código 1 |
+
+**Documentación final:** `README.md` reescrito con puesta en marcha, roles,
+pruebas, respaldo/restauración, variables y limitaciones; `MANUAL_USUARIO.md`
+con el uso por rol. El alcance de despliegue queda en local con Docker Compose.
+
 ---
 
 ## 5. Historial: fallos de la Etapa 4 y su resolución
@@ -339,8 +398,9 @@ desarrollo; conviene comprobar que no queden procesos vivos antes de probar.
 
 ## 6. Pendiente de implementación
 
-- **Etapa 9:** integración, pruebas de extremo a extremo documentadas,
-  respaldo/restauración, documentación final y despliegue.
+La Etapa 9 cerró el alcance del MVP. No quedan etapas de implementación
+pendientes; los puntos siguientes son decisiones de producto o mejoras fuera
+del alcance actual.
 
 ### Decisiones pendientes (heredadas del documento)
 
@@ -390,23 +450,38 @@ desarrollo; conviene comprobar que no queden procesos vivos antes de probar.
 - El frontend refleja las reglas del backend: no duplica permisos ni debilita
   validaciones; solo oculta acciones que el servidor rechazaría.
 
+### Decisiones tomadas para la Etapa 9
+
+- Se versiona la suite E2E con Playwright en `e2e/`, con Chrome del sistema y
+  credenciales por variables de entorno.
+- El respaldo incluye base y volumen de documentos, con manifiesto SHA256 y
+  verificación automática de restauración en recursos temporales.
+- La restauración sobre datos reales es explícita y destructiva: exige
+  `-Confirmar` y detiene el backend durante la operación.
+- Se mantiene una base limpia: solo cuentas y un profesional sintéticos, sin
+  pacientes, citas, atenciones ni documentos.
+- Documentación final: README ampliado más manual breve de uso por rol.
+- Despliegue: solo local con Docker Compose; sin guía de servidor productivo.
+
 ---
 
 ## 7. Lo que NO se ha probado
 
-- La verificación E2E se ejecutó con un script externo al repositorio
-  (`playwright-core` en `%TEMP%`); no hay suite E2E versionada ni en CI.
+- La suite E2E no se ejecuta en CI ni en otro navegador que no sea Chrome/Edge
+  del sistema; no cubre todos los módulos ni todos los caminos de error.
 - La persistencia de documentos se verificó en el volumen real con archivos
   pequeños; no se probaron archivos cercanos al límite de 10 MB, cortes de
   conexión ni cargas concurrentes.
 - No hay análisis antivirus ni cuarentena de archivos subidos.
-- No se ha probado respaldo ni restauración de la base de datos ni del volumen
-  de documentos.
+- La restauración real de `restauracion.ps1` **no se ejecutó sobre los datos de
+  desarrollo**: solo se validó su sintaxis y la guarda `-Confirmar`. La
+  restauración completa se probó en recursos temporales con `-Verificar`.
+- No se probó una restauración desde otro equipo ni con respaldos antiguos.
 - **Concurrencia real:** las pruebas fuerzan las restricciones de la base
   (solapamiento y atención única) sin lanzar dos peticiones HTTP simultáneas.
 - No se ha probado el flujo de recuperación de contraseña (no existe).
 - No se ha probado en un entorno distinto de este equipo Windows con Docker
-  Desktop.
+  Desktop ni con HTTPS o proxy inverso.
 
 ---
 
@@ -474,10 +549,32 @@ Nuevos:
                       Atenciones,Documentos}.jsx
 ```
 
-### 8.3. Solo local (no versionado)
+### 8.3. Incorporados en el commit de cierre (Etapa 9)
+
+```text
+Modificados:
+  README.md                             # instalación, roles, pruebas, respaldo
+  .gitignore                            # informes E2E y respaldos locales
+
+Nuevos:
+  MANUAL_USUARIO.md                     # uso por rol
+  e2e/package.json
+  e2e/package-lock.json
+  e2e/playwright.config.js              # Chrome, baseURL e informes
+  e2e/limpieza.js                       # borra datos y archivos del RUT de prueba
+  e2e/pruebas/flujo-completo.spec.js    # recorrido E2E de 7 pasos
+  scripts/respaldo.ps1                  # respaldo + verificación temporal
+  scripts/restauracion.ps1              # restauración con -Confirmar
+```
+
+### 8.4. Solo local (no versionado)
 
 ```text
 .env                        # credenciales locales generadas
+respaldos/                  # respaldos creados por scripts/respaldo.ps1
+e2e/node_modules/           # dependencias instaladas de la suite E2E
+e2e/playwright-report/      # informe HTML de la última ejecución
+e2e/test-results/           # trazas y capturas de fallos
 ```
 
 ---
@@ -525,6 +622,24 @@ docker compose exec backend python -m app.cli.crear_admin \
   --correo ana@ejemplo.cl
 ```
 
+Pruebas de extremo a extremo y respaldo (PowerShell):
+
+```powershell
+cd e2e
+npm install
+$env:DISS_E2E_ADMIN_PASSWORD = "clave-del-administrador"
+$env:DISS_E2E_PROF_PASSWORD  = "clave-del-profesional"
+npx playwright test
+cd ..
+
+.\scripts\respaldo.ps1 -Verificar
+
+.\scripts\restauracion.ps1 `
+  -Base .\respaldos\base_YYYYMMDD_HHMMSS.dump `
+  -Documentos .\respaldos\documentos_YYYYMMDD_HHMMSS.tar.gz `
+  -Confirmar
+```
+
 - Frontend: <http://localhost:5173>
 - Swagger: <http://localhost:8000/docs>
 - Salud: <http://localhost:8000/api/v1/health>
@@ -539,7 +654,7 @@ backend (`docker compose build backend` + `docker compose up -d backend`).
 
 ---
 
-## 11. Cierre de las Etapas 5 a 8
+## 11. Cierre de las Etapas 5 a 9
 
 ### Etapa 5 — Citas y agenda
 
@@ -615,27 +730,44 @@ no introdujeron cambios de esquema.
 
 La Etapa 8 no modificó el backend ni el esquema; `alembic check` sigue limpio.
 
+### Etapa 9 — Integración y cierre
+
+| Criterio | Estado |
+|---|---|
+| Suite E2E versionada con Playwright | Cumplido (`e2e/`) |
+| Recorrido completo: login, paciente, cita, atención y documentos | Cumplido |
+| Control de acceso por rol verificado desde la interfaz | Cumplido (`/usuarios` bloqueado) |
+| Limpieza de datos y archivos del RUT de prueba | Cumplido (0 filas y 0 archivos) |
+| Credenciales fuera del repositorio | Cumplido (variables de entorno) |
+| Respaldo de base, documentos y manifiesto SHA256 | Cumplido |
+| Restauración verificada en recursos temporales | Cumplido (conteos y contenido idénticos) |
+| Restauración real protegida por `-Confirmar` | Cumplido (sintaxis y guarda validadas) |
+| README ampliado | Cumplido |
+| Manual de usuario por rol | Cumplido (`MANUAL_USUARIO.md`) |
+| Base final sin datos clínicos | Cumplido (2 usuarios, 1 profesional, 0 registros) |
+| Commit de la etapa | Cumplido |
+
+La Etapa 9 no modificó backend, frontend ni esquema; la suite de backend y
+`alembic check` se mantienen sin cambios.
+
 ---
 
-## 12. Siguiente etapa propuesta: Etapa 9 — Integración y cierre
+## 12. Etapa 9 — Alcance ejecutado
 
-**Objetivo:** consolidar el MVP: pruebas de extremo a extremo documentadas,
-respaldo y restauración de base de datos y volumen de documentos, revisión de
-seguridad operativa, documentación final y criterios de despliegue.
+**Objetivo:** consolidar el MVP: pruebas de extremo a extremo versionadas,
+respaldo y restauración de base de datos y volumen de documentos, documentación
+final y criterios de operación.
 
-**Decisiones a consultar antes de implementar:**
+**Decisiones aplicadas:**
 
-1. **Alcance de la integración:** ¿se versiona una suite E2E (por ejemplo
-   Playwright) o basta la verificación manual documentada?
-2. **Respaldo:** ¿`pg_dump` + copia del volumen de documentos con script y
-   restauración probada, o solo documentar el procedimiento?
-3. **Datos de demostración:** ¿se mantiene la base vacía salvo cuentas, o se
-   agrega un `seed` sintético reproducible?
-4. **Documentación final:** ¿README ampliado, manual de usuario breve, o ambos?
-5. **Despliegue:** ¿solo local con Docker Compose, o guía para un servidor
-   municipal (HTTPS, proxy inverso, secretos)?
-6. **Seguridad pendiente:** política de contraseñas, recuperación de acceso,
-   auditoría/retención y antivirus de archivos.
+1. **Integración:** se versiona la suite E2E con Playwright; no se ejecuta en CI.
+2. **Respaldo:** `pg_dump` + copia del volumen, con verificación automática de la
+   restauración en recursos temporales.
+3. **Datos finales:** base limpia, solo con cuentas y un profesional sintéticos.
+4. **Documentación:** README ampliado y manual breve de usuario por rol.
+5. **Despliegue:** solo local con Docker Compose; sin guía de servidor.
+6. **Seguridad:** las limitaciones conocidas (auditoría, recuperación de acceso,
+   antivirus y retención) quedan documentadas y fuera del alcance del MVP.
 
 **Requisito previo:** cerrado (commit de cierre de la Etapa 8).
 
@@ -669,9 +801,16 @@ seguridad operativa, documentación final y criterios de despliegue.
 | 02-11-2026 | `npm install` + `npm audit` del frontend | 0 vulnerabilidades |
 | 02-11-2026 | `npm run build` (Vite 6.4.5) | Correcto, 54 módulos |
 | 02-11-2026 | `pytest` (suite completa, sin cambios de backend) | **133 passed**, 1 warning |
+| 02-11-2026 | `pytest` (re-ejecución final tras la Etapa 9) | **133 passed**, 1 warning (539.56s) |
 | 02-11-2026 | `alembic check` tras la Etapa 8 | «No new upgrade operations detected» |
 | 02-11-2026 | Flujo E2E en Chrome headless (Etapa 8) | 12 comprobaciones correctas, sin errores de consola |
 | 02-11-2026 | Limpieza de datos E2E y volumen | 0 filas sintéticas; volumen vacío |
+| 02-11-2026 | Suite E2E versionada (`e2e/`) con limpieza reforzada | `1 passed (1.2m)`, 7 pasos |
+| 02-11-2026 | Datos y archivos del RUT de prueba tras la suite | 0 filas en 4 tablas; 0 archivos |
+| 02-11-2026 | `respaldo.ps1 -Verificar` con volumen vacío | Conteos `2,1,0,0,0,0,1`; 0 documentos |
+| 02-11-2026 | `respaldo.ps1 -Verificar` con 1 documento sintético | Conteos idénticos; contenido idéntico |
+| 02-11-2026 | Sintaxis de `respaldo.ps1` y `restauracion.ps1` | Correcta (parser de PowerShell) |
+| 02-11-2026 | `restauracion.ps1` sin `-Confirmar` | Cancela sin tocar datos; código 1 |
 
 ---
 
@@ -690,4 +829,12 @@ seguridad operativa, documentación final y criterios de despliegue.
   autorización: eliminan datos, archivos y esquema.
 - Las correcciones de atenciones no dejan traza hasta que exista auditoría.
 - Los documentos no se eliminan al borrar un paciente con historial (el borrado
-  está restringido), pero no hay política de retención ni respaldo del volumen.
+  está restringido); el respaldo del volumen se cubre con `scripts/respaldo.ps1`,
+  pero no hay política de retención ni respaldos programados.
+- La suite E2E usa el RUT sintético `77777777-7` y borra sus datos y archivos;
+  no debe cambiarse por un RUT real. Sus contraseñas se pasan por variables de
+  entorno y no se versionan.
+- `respaldos/` contiene datos personales y clínicos: no se versiona y debe
+  copiarse a un medio seguro.
+- `restauracion.ps1` reemplaza la base y los documentos; sin `-Confirmar` no
+  ejecuta ninguna operación destructiva.

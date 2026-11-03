@@ -17,6 +17,14 @@ node_modules/
 dist/
 npm-debug.log*
 
+# Pruebas E2E
+playwright-report/
+test-results/
+blob-report/
+
+# Respaldos locales
+respaldos/
+
 # Editores y sistema
 .vscode/
 .idea/
